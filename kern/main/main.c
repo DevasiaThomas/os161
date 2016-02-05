@@ -213,4 +213,5 @@ kmain(char *arguments)
 	menu(arguments);
 
 	/* Should not get here */
+	/* and here also */
 }
