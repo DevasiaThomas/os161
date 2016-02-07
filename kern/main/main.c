@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-	//helloworld!
+
 /*
  * Main.
  */
@@ -213,5 +213,4 @@ kmain(char *arguments)
 	menu(arguments);
 
 	/* Should not get here */
-
 }

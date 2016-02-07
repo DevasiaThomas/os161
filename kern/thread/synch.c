@@ -153,7 +153,16 @@ lock_create(const char *name)
 		kfree(lock);
 		return NULL;
 	}
+	lock->lk_wchan = wchan_create(lock->lk_name);
+	if(lock->lk_wchan == NULL)
+	{
+		kfree(lock->lk_name);
+		kfree(lock);
+		return NULL;
+	}
 
+	spinlock_init(&lock->lk_lock);
+	lock->t_name_with_lock = kstrdup("");
 	// add stuff here as needed
 
 	return lock;
@@ -164,9 +173,10 @@ lock_destroy(struct lock *lock)
 {
 	KASSERT(lock != NULL);
 
-	// add stuff here as needed
-
+	spinlock_cleanup(&lock->lk_lock);
+	wchan_destroy(lock->lk_wchan);
 	kfree(lock->lk_name);
+	kfree(lock->t_name_with_lock);
 	kfree(lock);
 }
 
@@ -174,32 +184,62 @@ void
 lock_acquire(struct lock *lock)
 {
 	// Write this
+	KASSERT(lock != NULL);
+	KASSERT(curthread->t_in_interrupt == false);
 
-	(void)lock;  // suppress warning until code gets written
+	spinlock_acquire(&lock->lk_lock);
+	if(lock_do_i_hold(lock))
+	{
+		return;
+	}
+	
+	while(lock->lk_status == true)
+	{	
+		wchan_sleep(lock->lk_wchan,&lock->lk_lock);
+	}
+	KASSERT(lock->lk_status == false);
+	lock->lk_status = true;
+	lock->t_name_with_lock = kstrdup(curthread->t_name);			
+	
+	spinlock_release(&lock->lk_lock);
+
 }
 
 void
 lock_release(struct lock *lock)
 {
 	// Write this
+	KASSERT(lock != NULL);
 
-	(void)lock;  // suppress warning until code gets written
+	spinlock_acquire(&lock->lk_lock);
+	KASSERT(lock->lk_status == true);
+	KASSERT(strcmp(lock->t_name_with_lock,curthread->t_name) == true);
+	
+	lock->lk_status = false;
+	lock->t_name_with_lock = kstrdup("");
+
+	spinlock_release(&lock->lk_lock);
 }
 
 bool
 lock_do_i_hold(struct lock *lock)
 {
-	// Write this
-
-	(void)lock;  // suppress warning until code gets written
-
-	return true; // dummy until code gets written
+	KASSERT(lock != NULL);
+	
+	KASSERT(lock->lk_status == true);
+	if(strcmp(lock->lk_name, curthread->t_name) == true)
+	{
+		return true;
+	}
+	else
+	{
+		return false;
+	}
 }
 
 ////////////////////////////////////////////////////////////
 //
 // CV
-
 
 struct cv *
 cv_create(const char *name)
