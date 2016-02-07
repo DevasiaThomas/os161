@@ -162,7 +162,8 @@ lock_create(const char *name)
 	}
 
 	spinlock_init(&lock->lk_lock);
-	lock->t_name_with_lock = kstrdup("");
+	lock->lk_status = false;
+	lock->thread_with_lock = NULL;
 	// add stuff here as needed
 
 	return lock;
@@ -176,7 +177,6 @@ lock_destroy(struct lock *lock)
 	spinlock_cleanup(&lock->lk_lock);
 	wchan_destroy(lock->lk_wchan);
 	kfree(lock->lk_name);
-	kfree(lock->t_name_with_lock);
 	kfree(lock);
 }
 
@@ -190,6 +190,8 @@ lock_acquire(struct lock *lock)
 	spinlock_acquire(&lock->lk_lock);
 	if(lock_do_i_hold(lock))
 	{
+		lock->thread_with_lock = curthread;
+		spinlock_release(&lock->lk_lock);
 		return;
 	}
 	
@@ -199,7 +201,7 @@ lock_acquire(struct lock *lock)
 	}
 	KASSERT(lock->lk_status == false);
 	lock->lk_status = true;
-	lock->t_name_with_lock = kstrdup(curthread->t_name);			
+	lock->thread_with_lock = curthread;			
 	
 	spinlock_release(&lock->lk_lock);
 
@@ -212,12 +214,14 @@ lock_release(struct lock *lock)
 	KASSERT(lock != NULL);
 
 	spinlock_acquire(&lock->lk_lock);
-	KASSERT(lock->lk_status == true);
-	KASSERT(strcmp(lock->t_name_with_lock,curthread->t_name) == true);
+	//KASSERT(lock->lk_status == true);
+	if(lock_do_i_hold(lock))
+	{
+		lock->lk_status = false;
+		lock->thread_with_lock = NULL;
+		wchan_wakeone(lock->lk_wchan,&lock->lk_lock);
+	}
 	
-	lock->lk_status = false;
-	lock->t_name_with_lock = kstrdup("");
-
 	spinlock_release(&lock->lk_lock);
 }
 
@@ -226,8 +230,8 @@ lock_do_i_hold(struct lock *lock)
 {
 	KASSERT(lock != NULL);
 	
-	KASSERT(lock->lk_status == true);
-	if(strcmp(lock->lk_name, curthread->t_name) == true)
+	//KASSERT(lock->lk_status == true);
+	if(lock->thread_with_lock == curthread)
 	{
 		return true;
 	}
