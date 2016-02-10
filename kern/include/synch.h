@@ -75,9 +75,9 @@ void V(struct semaphore *);
 struct lock {
         char *lk_name;
 	struct wchan *lk_wchan;
-	struct spinlock lk_lock;
 	volatile bool lk_status;
 	volatile struct thread *thread_with_lock; 
+ 	struct spinlock lk_lock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };
@@ -153,8 +153,18 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
  * (should be) made internally.
  */
 
+#define RW_READ 0
+#define RW_WRITE 1
+#define RW_WRITER_WAITING 2
+#define RW_WRITER_ON_THE_WAY 3
+#define RW_FREE 4
+
 struct rwlock {
         char *rwlock_name;
+	struct wchan *rw_wchan;
+	volatile int c_readers;
+	int status;
+	struct spinlock rw_spinlock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };

@@ -340,3 +340,102 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 	//(void)cv;    // suppress warning until code gets written
 	//(void)lock;  // suppress warning until code gets written
 }
+
+struct rwlock *
+rwlock_create(const char *name)
+{
+	struct rwlock *rwlock;
+
+	rwlock = kmalloc(sizeof(*rwlock));
+	if (rwlock == NULL) {
+		return NULL;
+	}
+
+	rwlock->rwlock_name = kstrdup(name);
+	if (rwlock->rwlock_name==NULL) {
+		kfree(rwlock);
+		return NULL;
+	}
+
+	rwlock->rw_wchan = wchan_create(rwlock->rwlock_name);
+	if (rwlock->rw_wchan==NULL) {
+		kfree(rwlock->rwlock_name);
+		kfree(rwlock);
+		return NULL;
+	}
+	spinlock_init(&rwlock->rw_spinlock);
+	// add stuff here as needed
+	rwlock->c_readers = 0;
+	rwlock->status = RW_FREE;
+	return rwlock;
+}
+
+void 
+rwlock_destroy(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+
+	spinlock_cleanup(&rwlock->rw_spinlock);
+	wchan_destroy(rwlock->rw_wchan);
+	kfree(rwlock->rwlock_name);
+	kfree(rwlock);
+}
+
+void 
+rwlock_acquire_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+	
+	spinlock_acquire(&rwlock->rw_spinlock);
+	while(rwlock->status == RW_WRITE || rwlock->status == RW_WRITER_WAITING) {
+		wchan_sleep(rwlock->rw_wchan, &rwlock->rw_spinlock);
+	}
+	rwlock->c_readers++;
+	rwlock->status = RW_READ;
+	spinlock_release(&rwlock->rw_spinlock);	
+}
+
+void 
+rwlock_release_read(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+	
+	spinlock_acquire(&rwlock->rw_spinlock);
+	rwlock->c_readers--;
+	if(rwlock->c_readers == 0){
+		if(rwlock->status != RW_WRITER_WAITING){
+			rwlock->status = RW_FREE;
+		}
+		else{
+			rwlock->status = RW_WRITER_ON_THE_WAY;
+		}
+		wchan_wakeall(rwlock->rw_wchan,&rwlock->rw_spinlock);
+	}
+	spinlock_release(&rwlock->rw_spinlock);
+}
+
+void 
+rwlock_acquire_write(struct rwlock *rwlock)
+{
+	KASSERT(rwlock != NULL);
+	
+	spinlock_acquire(&rwlock->rw_spinlock);
+	while(rwlock->status == RW_READ || rwlock->status == RW_WRITE || rwlock->status == RW_WRITER_WAITING) {
+		rwlock->status = RW_WRITER_WAITING;
+		wchan_sleep(rwlock->rw_wchan, &rwlock->rw_spinlock);
+	}
+	KASSERT(rwlock->status == RW_FREE || rwlock->status == RW_WRITER_ON_THE_WAY);
+	rwlock->status = RW_WRITE;
+	spinlock_release(&rwlock->rw_spinlock);	
+}
+
+void
+rwlock_release_write(struct rwlock *rwlock) 
+{
+	KASSERT(rwlock != NULL);
+	
+	spinlock_acquire(&rwlock->rw_spinlock);
+	rwlock->status = RW_FREE;
+	wchan_wakeall(rwlock->rw_wchan,&rwlock->rw_spinlock);
+	spinlock_release(&rwlock->rw_spinlock);
+}
