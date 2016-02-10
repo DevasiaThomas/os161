@@ -161,9 +161,9 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 
 struct rwlock {
         char *rwlock_name;
+	unsigned status;
 	struct wchan *rw_wchan;
 	volatile int c_readers;
-	int status;
 	struct spinlock rw_spinlock;
         // add what you need here
         // (don't forget to mark things volatile as needed)
