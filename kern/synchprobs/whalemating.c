@@ -44,7 +44,27 @@
  * Called by the driver during initialization.
  */
 
+static struct cv *cv_whalemating;
+static struct lock *lock_whalemating;
+static struct spinlock splk_whalemating;
+static uint32_t c_male;
+static uint32_t c_female;
+static uint32_t c_matchmaker;
+
 void whalemating_init() {
+	if(cv_whalemating== NULL) {
+		cv_whalemating = cv_create("cv_whalemating");
+		if(cv_whalemating ==NULL) {
+			panic("synchprobs: cv_create failed\n");
+		}
+	}
+	if(lock_whalemating == NULL) {
+		lock_whalemating = lock_create("lock_whalemating");
+		if(lock_whalemating == NULL) {
+			panic("synchprobs: lock_create failed\n");
+		}
+	}
+	spinlock_init(&splk_whalemating);
 	return;
 }
 
@@ -60,7 +80,22 @@ whalemating_cleanup() {
 void
 male(uint32_t index)
 {
-	(void)index;
+	lock_acquire(lock_whalemating);
+	spinlock_acquire(&splk_whalemating);
+	c_male++;
+	spinlock_release(&splk_whalemating);
+	male_start(index);
+	
+	while(c_female == 0 && c_matchmaker == 0){
+		cv_wait(cv_whalemating,lock_whalemating);
+	}
+	
+	male_end(index);
+	spinlock_acquire(&splk_whalemating);
+	c_male--;
+	cv_broadcast(cv_whalemating,lock_whalemating);
+	spinlock_release(&splk_whalemating);
+	lock_release(lock_whalemating);
 	/*
 	 * Implement this function by calling male_start and male_end when
 	 * appropriate.
@@ -71,7 +106,23 @@ male(uint32_t index)
 void
 female(uint32_t index)
 {
-	(void)index;
+	lock_acquire(lock_whalemating);
+	spinlock_acquire(&splk_whalemating);
+	c_female++;
+	spinlock_release(&splk_whalemating);
+	female_start(index);	
+
+	while(c_male == 0 && c_matchmaker == 0){
+		cv_wait(cv_whalemating,lock_whalemating);
+	}
+	
+	female_end(index);
+	spinlock_acquire(&splk_whalemating);
+	c_female--;
+	cv_broadcast(cv_whalemating,lock_whalemating);
+	spinlock_release(&splk_whalemating);
+	lock_release(lock_whalemating);
+	
 	/*
 	 * Implement this function by calling female_start and female_end when
 	 * appropriate.
@@ -82,7 +133,24 @@ female(uint32_t index)
 void
 matchmaker(uint32_t index)
 {
-	(void)index;
+	lock_acquire(lock_whalemating);
+
+	spinlock_acquire(&splk_whalemating);
+	c_matchmaker++;
+
+	spinlock_release(&splk_whalemating);
+	matchmaker_start(index);	
+
+	while(c_male == 0 && c_female == 0){
+		cv_wait(cv_whalemating,lock_whalemating);
+	}
+	
+	matchmaker_end(index);
+	spinlock_acquire(&splk_whalemating);
+	c_matchmaker--;
+	cv_broadcast(cv_whalemating,lock_whalemating);
+	spinlock_release(&splk_whalemating);
+	lock_release(lock_whalemating);
 	/*
 	 * Implement this function by calling matchmaker_start and matchmaker_end
 	 * when appropriate.
