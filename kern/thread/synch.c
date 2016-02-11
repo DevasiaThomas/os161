@@ -188,9 +188,9 @@ lock_acquire(struct lock *lock)
 	KASSERT(curthread->t_in_interrupt == false);
 
 	spinlock_acquire(&lock->lk_lock);
-	if(lock_do_i_hold(lock))
+	if(lock->thread_with_lock == curthread)
 	{
-		lock->thread_with_lock = curthread;
+		//lock->thread_with_lock = curthread;
 		spinlock_release(&lock->lk_lock);
 		return;
 	}
@@ -215,13 +215,10 @@ lock_release(struct lock *lock)
 	KASSERT(lock != NULL);
 
 	spinlock_acquire(&lock->lk_lock);
-	//KASSERT(lock->lk_status == true);
-	if(lock_do_i_hold(lock))
-	{
-		lock->lk_status = false;
-		lock->thread_with_lock = NULL;
-		wchan_wakeone(lock->lk_wchan,&lock->lk_lock);
-	}
+	KASSERT(lock->thread_with_lock == curthread);
+	lock->lk_status = false;
+	lock->thread_with_lock = NULL;
+	wchan_wakeall(lock->lk_wchan,&lock->lk_lock);
 	
 	spinlock_release(&lock->lk_lock);
 }
@@ -231,15 +228,7 @@ lock_do_i_hold(struct lock *lock)
 {
 	KASSERT(lock != NULL);
 	
-	//KASSERT(lock->lk_status == true);
-	if(lock->thread_with_lock == curthread)
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return(lock->thread_with_lock == curthread);
 }
 
 ////////////////////////////////////////////////////////////
@@ -293,12 +282,12 @@ cv_wait(struct cv *cv, struct lock *lock)
 	
 	KASSERT(cv != NULL);
 	KASSERT(lock != NULL);
-	
+
 	spinlock_acquire(&cv->cv_spinlock);
-	if(lock_do_i_hold(lock)){	
-		lock_release(lock);
-		wchan_sleep(cv->cv_wchan,&cv->cv_spinlock);
-	}
+	
+	lock_release(lock);
+	wchan_sleep(cv->cv_wchan,&cv->cv_spinlock);
+	
 	spinlock_release(&cv->cv_spinlock);
 	lock_acquire(lock);		
 	//(void)cv;    // suppress warning until code gets written
@@ -314,9 +303,8 @@ cv_signal(struct cv *cv, struct lock *lock)
 	KASSERT(lock != NULL);
 	
 	spinlock_acquire(&cv->cv_spinlock);
-	if(lock_do_i_hold(lock)){
-		wchan_wakeone(cv->cv_wchan, &cv->cv_spinlock);
-	}
+	KASSERT(lock_do_i_hold(lock));
+	wchan_wakeone(cv->cv_wchan, &cv->cv_spinlock);
 	spinlock_release(&cv->cv_spinlock);
 	//(void)cv;    // suppress warning until code gets written
 	//(void)lock;  // suppress warning until code gets written
@@ -331,11 +319,8 @@ cv_broadcast(struct cv *cv, struct lock *lock)
 	KASSERT(lock != NULL);
 	
 	spinlock_acquire(&cv->cv_spinlock);
-	if(lock_do_i_hold(lock)){
-		spinlock_acquire(&lock->lk_lock);
-		wchan_wakeall(cv->cv_wchan, &cv->cv_spinlock);
-		spinlock_release(&lock->lk_lock);
-	}
+	KASSERT(lock_do_i_hold(lock));
+	wchan_wakeall(cv->cv_wchan, &cv->cv_spinlock);
 	spinlock_release(&cv->cv_spinlock);
 	//(void)cv;    // suppress warning until code gets written
 	//(void)lock;  // suppress warning until code gets written
@@ -385,7 +370,8 @@ void
 rwlock_acquire_read(struct rwlock *rwlock)
 {
 	KASSERT(rwlock != NULL);
-	
+	KASSERT(curthread->t_in_interrupt == false);	
+
 	spinlock_acquire(&rwlock->rw_spinlock);
 	while(rwlock->status == RW_WRITE || rwlock->status == RW_WRITER_WAITING) {
 		wchan_sleep(rwlock->rw_wchan, &rwlock->rw_spinlock);
@@ -418,6 +404,7 @@ void
 rwlock_acquire_write(struct rwlock *rwlock)
 {
 	KASSERT(rwlock != NULL);
+	KASSERT(curthread->t_in_interrupt == false);
 	
 	spinlock_acquire(&rwlock->rw_spinlock);
 	while(rwlock->status == RW_READ || rwlock->status == RW_WRITE || rwlock->status == RW_WRITER_WAITING) {
