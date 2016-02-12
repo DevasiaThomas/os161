@@ -73,28 +73,8 @@
  * Called by the driver during initialization.
  */
 
-static struct semaphore *sem_quad[4];
-static struct lock *lk_intersection;
-static bool got_all_quads;
-
 void
 stoplight_init() {
-	unsigned i;
-	for(i = 0;i < 4; i++) {
-		if(sem_quad[i] == NULL) {
-			sem_quad[i] = sem_create("sem_quad",1);
-			if(sem_quad[i] == NULL) {
-				panic("synchprob: sem_create failed\n");
-			}
-		}
-	}
-	if(lk_intersection == NULL) {
-		lk_intersection = lock_create("lk_intersection");
-		if(lk_intersection == NULL) {
-			panic("synchprob: lock_create failed\n");
-		}
-	}
-	got_all_quads = false;
 	return;
 }
 
@@ -103,36 +83,14 @@ stoplight_init() {
  */
 
 void stoplight_cleanup() {
-	unsigned i;
-	for(i = 0; i < 4; i++) {
-		sem_destroy(sem_quad[i]);
-	}
-	lock_destroy(lk_intersection);
 	return;
 }
 
 void
 turnright(uint32_t direction, uint32_t index)
 {
-	//(void)direction;
-	//(void)index;
-	repeat:
-	lock_acquire(lk_intersection);
-	if(sem_quad[direction]->sem_count == 1) {
-		P(sem_quad[direction]);
-		got_all_quads = true;
-	}
-	lock_release(lk_intersection);
-	
-	if(got_all_quads) {
-		inQuadrant(direction,index);
-		V(sem_quad[direction]);
-		leaveIntersection(index); 
-		got_all_quads = false;
-	}
-	else {
-		goto repeat;
-	}
+	(void)direction;
+	(void)index;
 	/*
 	 * Implement this function.
 	 */
@@ -141,28 +99,8 @@ turnright(uint32_t direction, uint32_t index)
 void
 gostraight(uint32_t direction, uint32_t index)
 {
-	//(void)direction;
-	//(void)index;
-	
-	repeat:
-	lock_acquire(lk_intersection);
-	if(sem_quad[direction]->sem_count == 1 && sem_quad[direction]->sem_count == 1) {
-		P(sem_quad[direction]);
-		P(sem_quad[(direction+3)%4]);
-		got_all_quads = true;
-	}
-	lock_release(lk_intersection);
-	if(got_all_quads) {
-		inQuadrant(direction,index);
-		V(sem_quad[direction]);
-		inQuadrant((direction+3)%4,index);
-		V(sem_quad[(direction+3)%4]);
-		leaveIntersection(index);
-		got_all_quads = false;
-	}
-	else {
-		goto repeat;
-	}
+	(void)direction;
+	(void)index;
 	/*
 	 * Implement this function.
 	 */
@@ -171,31 +109,8 @@ gostraight(uint32_t direction, uint32_t index)
 void
 turnleft(uint32_t direction, uint32_t index)
 {
-	//(void)direction;
-	//(void)index;
-	
-	repeat:
-	lock_acquire(lk_intersection);
-	if(sem_quad[direction]->sem_count == 1 && sem_quad[(direction+3)%4]->sem_count == 1 && sem_quad[(((direction+3)%4)+3)%4]) {
-		P(sem_quad[direction]);
-		P(sem_quad[(direction+3)%4]);
-		P(sem_quad[(((direction +3)%4)+3)%4]);
-		got_all_quads = true;
-	}
-	lock_release(lk_intersection);
-	if(got_all_quads) {
-		inQuadrant(direction,index);
-		V(sem_quad[direction]);
-		inQuadrant((direction+3)%4,index);
-		V(sem_quad[(direction+3)%4]);
-		inQuadrant((((direction+3)%4)+3)%4,index);
-		V(sem_quad[(((direction+3)%4)+3)%4]);
-		leaveIntersection(index);
-		got_all_quads = false;
-	}
-	else {
-		goto repeat;
-	}
+	(void)direction;
+	(void)index;
 	/*
 	 * Implement this function.
 	 */
