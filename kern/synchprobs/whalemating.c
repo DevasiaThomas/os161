@@ -44,16 +44,16 @@
  * Called by the driver during initialization.
  */
 
-static struct cv *cv_whalemating;
-static struct lock *lk_whalemating;
-static struct lock *lk_male;
-static struct lock *lk_female;
-static struct lock *lk_matchmaker;
-static struct semaphore *sem_whalemating;
-static struct semaphore *donesem;
+//static struct cv *cv_whalemating;
+//static struct lock *lk_whalemating;
+static struct semaphore *sem_male;
+static struct semaphore *sem_female;
+static struct semaphore *sem_matchmaker;
+//static struct semaphore *sem_whalemating;
+//static struct semaphore *donesem;
 
 void whalemating_init() {
-	if(cv_whalemating == NULL) {
+/*	if(cv_whalemating == NULL) {
 		cv_whalemating = cv_create("cv_whalemating");
 		if(cv_whalemating ==NULL) {
 			panic("synchprobs: cv_create failed\n");
@@ -64,26 +64,26 @@ void whalemating_init() {
 		if(lk_whalemating == NULL) {
 			panic("synchprobs: lock_create failed\n");
 		}
-	}
-	if(lk_male == NULL) {
-		lk_male = lock_create("lk_male");
-		if(lk_male == NULL) {
-			panic("synchprobs: lock_create failed\n");
+	} */
+	if(sem_male == NULL) {
+		sem_male = sem_create("sem_male",0);
+		if(sem_male == NULL) {
+			panic("synchprobs: sem_create failed\n");
 		}
 	}
-	if(lk_female == NULL) {
-		lk_female = lock_create("lk_female");
-		if(lk_female == NULL) {
-			panic("synchprobs: lock_create failed\n");
+	if(sem_female == NULL) {
+		sem_female = sem_create("sem_female",0);
+		if(sem_female == NULL) {
+			panic("synchprobs: sem_create failed\n");
 		}
 	}
-	if(lk_matchmaker == NULL) {
-		lk_matchmaker = lock_create("lk_matchmaker");
-		if(lk_matchmaker == NULL) {
-			panic("synchprobs: lock_create failed\n");
+	if(sem_matchmaker == NULL) {
+		sem_matchmaker = sem_create("sem_matchmaker",0);
+		if(sem_matchmaker == NULL) {
+			panic("synchprobs: sem_create failed\n");
 		}
 	}
-	if(sem_whalemating == NULL){
+/*	if(sem_whalemating == NULL){
 		sem_whalemating = sem_create("sem_whalemating",3);
 		if(sem_whalemating == NULL){
 			panic("synchprobs: sem_create failed\n");
@@ -95,7 +95,7 @@ void whalemating_init() {
 			panic("synchprobs: sem_create failed\n");
 		}
 	}
-	
+*/	
 	return;
 }
 
@@ -106,19 +106,19 @@ void whalemating_init() {
 void
 whalemating_cleanup() {
 
-	cv_destroy(cv_whalemating);
-	lock_destroy(lk_whalemating);
-	lock_destroy(lk_male);
-	lock_destroy(lk_female);
-	lock_destroy(lk_matchmaker);
-	sem_destroy(sem_whalemating);
-	cv_whalemating = NULL;
-	lk_whalemating = NULL;
-	lk_male = NULL;
-	lk_female = NULL;
-	lk_matchmaker = NULL;
-	sem_whalemating = NULL;
-	donesem = NULL;
+	//cv_destroy(cv_whalemating);
+	//lock_destroy(lk_whalemating);
+	sem_destroy(sem_male);
+	sem_destroy(sem_female);
+	sem_destroy(sem_matchmaker);
+	//sem_destroy(sem_whalemating);
+	//cv_whalemating = NULL;
+	//lk_whalemating = NULL;
+	sem_male = NULL;
+	sem_female = NULL;
+	sem_matchmaker = NULL;
+	//sem_whalemating = NULL;
+	//donesem = NULL;
 
 	return;
 }
@@ -126,6 +126,13 @@ whalemating_cleanup() {
 void
 male(uint32_t index)
 {	
+	male_start(index);
+	V(sem_male);
+	V(sem_male);
+	P(sem_female);
+	P(sem_matchmaker);
+	male_end(index);
+	/*
 	male_start(index);
 	lock_acquire(lk_male);	
 	P(sem_whalemating);
@@ -148,17 +155,17 @@ male(uint32_t index)
 		cv_wait(cv_whalemating,lk_whalemating); //wait for female and matchmaker to complete
 	}
 	V(donesem);
-	V(sem_whalemating);
-	male_end(index);
+	V(sem_whalemating);	
 	lock_release(lk_whalemating);
+	male_end(index);
 	lock_release(lk_male);
-	
+	*/
 	return;
 }
 
 void
 female(uint32_t index)
-{
+{	/*
 	female_start(index);
 	lock_acquire(lk_female);
 	P(sem_whalemating);
@@ -182,16 +189,22 @@ female(uint32_t index)
 	}
 	V(donesem);
 	V(sem_whalemating);
-	female_end(index);
 	lock_release(lk_whalemating);
+	female_end(index);
 	lock_release(lk_female);	
-	
+	*/
+	female_start(index);
+	V(sem_female);
+	V(sem_female);
+	P(sem_male);
+	P(sem_matchmaker);
+	female_end(index);
 	return;
 }
 
 void
 matchmaker(uint32_t index)
-{	
+{	/*
 	matchmaker_start(index);
 	lock_acquire(lk_matchmaker);
 	P(sem_whalemating);
@@ -215,10 +228,16 @@ matchmaker(uint32_t index)
 	}
 	V(donesem);
 	V(sem_whalemating);
-	matchmaker_end(index);
 	lock_release(lk_whalemating);
+	matchmaker_end(index);
 	lock_release(lk_matchmaker);
-
+	*/
+	matchmaker_start(index);
+	V(sem_matchmaker);
+	V(sem_matchmaker);
+	P(sem_male);
+	P(sem_female);
+	matchmaker_end(index);
 	return;
 }
 
