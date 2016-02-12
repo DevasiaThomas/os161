@@ -49,7 +49,8 @@ static struct lock *lk_whalemating;
 static struct lock *lk_male;
 static struct lock *lk_female;
 static struct lock *lk_matchmaker;
-static struct semaphore*sem_whalemating;
+static struct semaphore *sem_whalemating;
+static struct semaphore *donesem;
 
 void whalemating_init() {
 	if(cv_whalemating == NULL) {
@@ -88,6 +89,12 @@ void whalemating_init() {
 			panic("synchprobs: sem_create failed\n");
 		}
 	}	
+	if(donesem == NULL) {
+		donesem = sem_create("donesem",3);
+		if(donesem == NULL) {
+			panic("synchprobs: sem_create failed\n");
+		}
+	}
 	
 	return;
 }
@@ -98,12 +105,21 @@ void whalemating_init() {
 
 void
 whalemating_cleanup() {
+
 	cv_destroy(cv_whalemating);
 	lock_destroy(lk_whalemating);
 	lock_destroy(lk_male);
 	lock_destroy(lk_female);
 	lock_destroy(lk_matchmaker);
 	sem_destroy(sem_whalemating);
+	cv_whalemating = NULL;
+	lk_whalemating = NULL;
+	lk_male = NULL;
+	lk_female = NULL;
+	lk_matchmaker = NULL;
+	sem_whalemating = NULL;
+	donesem = NULL;
+
 	return;
 }
 
@@ -122,17 +138,19 @@ male(uint32_t index)
 	}
 	lock_release(lk_whalemating);
 	// mating started
-	V(sem_whalemating);
+	P(donesem);
 	// mating finished 
 	lock_acquire(lk_whalemating);
-	if(sem_whalemating->sem_count == 3) {
+	if(donesem->sem_count == 0) {
 		cv_broadcast(cv_whalemating,lk_whalemating); //broadcast that mating is finished
 	}
 	else {
 		cv_wait(cv_whalemating,lk_whalemating); //wait for female and matchmaker to complete
 	}
-	lock_release(lk_whalemating);
+	V(donesem);
+	V(sem_whalemating);
 	male_end(index);
+	lock_release(lk_whalemating);
 	lock_release(lk_male);
 	
 	return;
@@ -153,29 +171,29 @@ female(uint32_t index)
 	}
 	lock_release(lk_whalemating);
 	// mating started
-	V(sem_whalemating);
+	P(donesem);
 	// mating finished 
 	lock_acquire(lk_whalemating);
-	if(sem_whalemating->sem_count == 3) {
+	if(donesem->sem_count == 0) {
 		cv_broadcast(cv_whalemating,lk_whalemating); //broadcast that mating is finished
 	}
 	else {
 		cv_wait(cv_whalemating,lk_whalemating); //wait for male and matchmaker to complete
 	}
-	lock_release(lk_whalemating);
+	V(donesem);
+	V(sem_whalemating);
 	female_end(index);
+	lock_release(lk_whalemating);
 	lock_release(lk_female);	
 	
-		
-
 	return;
 }
 
 void
 matchmaker(uint32_t index)
 {	
-	lock_acquire(lk_matchmaker);
 	matchmaker_start(index);
+	lock_acquire(lk_matchmaker);
 	P(sem_whalemating);
 	lock_acquire(lk_whalemating);
 	if(sem_whalemating->sem_count == 0) {
@@ -186,17 +204,19 @@ matchmaker(uint32_t index)
 	}
 	lock_release(lk_whalemating);
 	// mating started
-	V(sem_whalemating);
+	P(donesem);
 	// mating finished 
 	lock_acquire(lk_whalemating);
-	if(sem_whalemating->sem_count == 3) {
+	if(donesem->sem_count == 0) {
 		cv_broadcast(cv_whalemating,lk_whalemating); //broadcast that mating is finished
 	}
 	else {
 		cv_wait(cv_whalemating,lk_whalemating); //wait for male and female to complete
 	}
-	lock_release(lk_whalemating);
+	V(donesem);
+	V(sem_whalemating);
 	matchmaker_end(index);
+	lock_release(lk_whalemating);
 	lock_release(lk_matchmaker);
 
 	return;
