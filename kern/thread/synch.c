@@ -360,7 +360,8 @@ void
 rwlock_destroy(struct rwlock *rwlock)
 {
 	KASSERT(rwlock != NULL);
-
+	KASSERT(rwlock->status == RW_FREE);
+	
 	spinlock_cleanup(&rwlock->rw_spinlock);
 	wchan_destroy(rwlock->rw_wchan);
 	kfree(rwlock->rwlock_name);
@@ -421,7 +422,7 @@ void
 rwlock_release_write(struct rwlock *rwlock) 
 {
 	KASSERT(rwlock != NULL);
-	
+		
 	spinlock_acquire(&rwlock->rw_spinlock);
 	rwlock->status = RW_FREE;
 	wchan_wakeall(rwlock->rw_wchan,&rwlock->rw_spinlock);
