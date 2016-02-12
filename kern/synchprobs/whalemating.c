@@ -110,8 +110,8 @@ whalemating_cleanup() {
 void
 male(uint32_t index)
 {	
-	lock_acquire(lk_male);
 	male_start(index);
+	lock_acquire(lk_male);	
 	P(sem_whalemating);
 	lock_acquire(lk_whalemating);
 	if(sem_whalemating->sem_count == 0) {
@@ -141,8 +141,8 @@ male(uint32_t index)
 void
 female(uint32_t index)
 {
-	lock_acquire(lk_female);
 	female_start(index);
+	lock_acquire(lk_female);
 	P(sem_whalemating);
 	lock_acquire(lk_whalemating);
 	if(sem_whalemating->sem_count == 0) {
@@ -164,7 +164,8 @@ female(uint32_t index)
 	}
 	lock_release(lk_whalemating);
 	female_end(index);
-	lock_release(lk_female);
+	lock_release(lk_female);	
+	
 		
 
 	return;
@@ -172,7 +173,7 @@ female(uint32_t index)
 
 void
 matchmaker(uint32_t index)
-{
+{	
 	lock_acquire(lk_matchmaker);
 	matchmaker_start(index);
 	P(sem_whalemating);
@@ -200,3 +201,4 @@ matchmaker(uint32_t index)
 
 	return;
 }
+

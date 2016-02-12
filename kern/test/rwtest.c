@@ -12,16 +12,16 @@
 #include <kern/secret.h>
 #include <spinlock.h>
 
-#define NREADER 128
-#define NWRITER 64
+#define NTHREADS 32
 
-static struct semaphore *testsem = NULL;
-static struct lock *testlock = NULL;
-static struct cv *testcv = NULL;
 static struct semaphore *donesem = NULL;
 static struct rwlock *rwlock = NULL;
 struct spinlock status_lock;
+struct spinlock splk;
 static bool test_status = FAIL;
+
+static volatile unsigned long testval1;
+static volatile unsigned long testval2;
 
 static
 void
