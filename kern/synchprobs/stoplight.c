@@ -69,12 +69,50 @@
 #include <test.h>
 #include <synch.h>
 
+static struct lock *lockm;
+static struct lock *lockq0;
+static struct lock *lockq1;
+static struct lock *lockq2;
+static struct lock *lockq3;
+
+
 /*
  * Called by the driver during initialization.
  */
 
 void
 stoplight_init() {
+	//Creating locks for each quadrant
+	if (lockm==NULL) {
+		lockm = lock_create("lockqmain");
+		if (lockm == NULL) {
+			panic("stoplight: lockmain_create failed\n");
+		}
+	}	
+	if (lockq0==NULL) {
+		lockq0 = lock_create("lockq0");
+		if (lockq0 == NULL) {
+			panic("stoplight: lockq0_create failed\n");
+		}
+	}
+	if (lockq1==NULL) {
+		lockq1 = lock_create("lockq1");
+		if (lockq1 == NULL) {
+			panic("stoplight: lockq1_create failed\n");
+		}
+	}
+	if (lockq2==NULL) {
+		lockq2 = lock_create("lockq2");
+		if (lockq2 == NULL) {
+			panic("stoplight: lockq2_create failed\n");
+		}
+	}
+	if (lockq3==NULL) {
+		lockq3 = lock_create("lockq3");
+		if (lockq3 == NULL) {
+			panic("stoplight: lockq3_create failed\n");
+		}
+	}
 	return;
 }
 
@@ -83,36 +121,179 @@ stoplight_init() {
  */
 
 void stoplight_cleanup() {
+	lock_destroy(lockq0);
+	lock_destroy(lockq1);
+	lock_destroy(lockq2);
+	lock_destroy(lockq3);
+	lock_destroy(lockm);
 	return;
 }
 
 void
 turnright(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
+	//(void)direction;
+	//(void)index;
 	/*
 	 * Implement this function.
 	 */
+	lock_acquire(lockm);
+	switch(direction){
+	case 0:
+		lock_acquire(lockq0);
+		lock_release(lockm);
+		inQuadrant(0,index);
+		leaveIntersection(index);
+		lock_release(lockq0);
+		break;
+	case 1:	
+		lock_acquire(lockq1);
+		lock_release(lockm);
+		inQuadrant(1,index);
+		leaveIntersection(index);
+		lock_release(lockq1);
+		break;
+	case 2:	
+		lock_acquire(lockq2);
+		lock_release(lockm);
+		inQuadrant(2,index);
+		leaveIntersection(index);
+		lock_release(lockq2);
+		break;
+	case 3:	
+		lock_acquire(lockq3);
+		lock_release(lockm);
+		inQuadrant(3,index);
+		leaveIntersection(index);
+		lock_release(lockq3);
+		break;
+	default: panic("stoplight: wrong direction while turning right\n");
+		lock_release(lockm);
+		break;
+	}
 	return;
 }
 void
 gostraight(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
+	//(void)direction;
+	//(void)index;
 	/*
 	 * Implement this function.
 	 */
+	lock_acquire(lockm);
+	switch(direction){
+	case 0:
+		lock_acquire(lockq0);
+		lock_acquire(lockq3);
+		lock_release(lockm);
+		inQuadrant(0,index);
+		inQuadrant(3,index);
+		lock_release(lockq0);
+		leaveIntersection(index);
+		lock_release(lockq3);
+		break;
+	case 1:	
+		lock_acquire(lockq1);
+		lock_acquire(lockq0);
+		lock_release(lockm);
+		inQuadrant(1,index);
+		inQuadrant(0,index);
+		lock_release(lockq1);
+		leaveIntersection(index);
+		lock_release(lockq0);
+		break;
+	case 2:	
+		lock_acquire(lockq2);
+		lock_acquire(lockq1);
+		lock_release(lockm);
+		inQuadrant(2,index);
+		inQuadrant(1,index);
+		lock_release(lockq2);
+		leaveIntersection(index);
+		lock_release(lockq1);
+		break;
+	case 3:	
+		lock_acquire(lockq3);
+		lock_acquire(lockq2);
+		lock_release(lockm);
+		inQuadrant(3,index);
+		inQuadrant(2,index);
+		lock_release(lockq3);
+		leaveIntersection(index);
+		lock_release(lockq2);
+		break;
+	default: panic("stoplight: wrong direction while going straight\n");
+		lock_release(lockm);
+		break;
+	}
 	return;
 }
 void
 turnleft(uint32_t direction, uint32_t index)
 {
-	(void)direction;
-	(void)index;
+	//(void)direction;
+	//(void)index;
 	/*
 	 * Implement this function.
 	 */
+	lock_acquire(lockm);
+	switch(direction){
+	case 0:
+		lock_acquire(lockq0);
+		lock_acquire(lockq3);
+		lock_acquire(lockq2);
+		lock_release(lockm);
+		inQuadrant(0,index);
+		inQuadrant(3,index);
+		lock_release(lockq0);
+		inQuadrant(2,index);
+		lock_release(lockq3);
+		leaveIntersection(index);
+		lock_release(lockq2);
+		break;
+	case 1:	
+		lock_acquire(lockq1);
+		lock_acquire(lockq0);
+		lock_acquire(lockq3);
+		lock_release(lockm);
+		inQuadrant(1,index);
+		inQuadrant(0,index);
+		lock_release(lockq1);
+		inQuadrant(3,index);
+		lock_release(lockq0);
+		leaveIntersection(index);
+		lock_release(lockq3);
+		break;
+	case 2:	
+		lock_acquire(lockq2);
+		lock_acquire(lockq1);
+		lock_acquire(lockq0);
+		lock_release(lockm);
+		inQuadrant(2,index);
+		inQuadrant(1,index);
+		lock_release(lockq2);
+		inQuadrant(0,index);
+		lock_release(lockq1);
+		leaveIntersection(index);
+		lock_release(lockq0);
+		break;
+	case 3:	
+		lock_acquire(lockq3);
+		lock_acquire(lockq2);
+		lock_acquire(lockq1);
+		lock_release(lockm);
+		inQuadrant(3,index);
+		inQuadrant(2,index);
+		lock_release(lockq3);
+		inQuadrant(1,index);
+		lock_release(lockq2);
+		leaveIntersection(index);
+		lock_release(lockq1);
+		break;
+	default: panic("stoplight: wrong direction while turning left\n");
+		lock_release(lockm);
+		break;
+	}
 	return;
 }
