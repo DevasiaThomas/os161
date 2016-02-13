@@ -125,7 +125,7 @@ int rwtest(int nargs, char **args) {
 	rwlock = NULL;	
 
 	kprintf_n("rwtest done\n");
-	success(test_status, SECRET, "sy5");
+	success(test_status, SECRET, "rwt1");
 
 	//kprintf_n("rwt1 unimplemented\n");
 	//success(FAIL, SECRET, "rwt1");
