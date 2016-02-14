@@ -126,6 +126,11 @@ void stoplight_cleanup() {
 	lock_destroy(lockq2);
 	lock_destroy(lockq3);
 	lock_destroy(lockm);
+	lockq0 = NULL;
+	lockq1 = NULL;
+	lockq2 = NULL;
+	lockq3 = NULL;
+	lockm = NULL;
 	return;
 }
 

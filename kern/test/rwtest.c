@@ -86,6 +86,12 @@ int rwtest(int nargs, char **args) {
 			panic("synchtest: rwlock_create failed\n");	
 		}
 	}
+	if(donesem == NULL){
+		donesem = sem_create("donesem",0);
+		if(rwlock == NULL){
+			panic("synchtest: sem_create failed\n");	
+		}
+	}
 	spinlock_init(&splk);
 	spinlock_init(&status_lock);
 	
@@ -112,12 +118,17 @@ int rwtest(int nargs, char **args) {
 		P(donesem);
 	}
 	rwlock_destroy(rwlock);	
+	sem_destroy(donesem);
+	spinlock_cleanup(&splk);
+	spinlock_cleanup(&splk);
+	donesem = NULL;
+	rwlock = NULL;	
 
 	kprintf_n("rwtest done\n");
 	success(test_status, SECRET, "sy5");
 
-	kprintf_n("rwt1 unimplemented\n");
-	success(FAIL, SECRET, "rwt1");
+	//kprintf_n("rwt1 unimplemented\n");
+	//success(FAIL, SECRET, "rwt1");
 
 	return 0;
 }
