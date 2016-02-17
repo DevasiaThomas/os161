@@ -214,12 +214,12 @@ lock_release(struct lock *lock)
 {
 	// Write this
 	KASSERT(lock != NULL);
-
-	spinlock_acquire(&lock->lk_lock);
 	KASSERT(lock->thread_with_lock == curthread);
+	spinlock_acquire(&lock->lk_lock);
+
 	lock->lk_status = false;
 	lock->thread_with_lock = NULL;
-	wchan_wakeall(lock->lk_wchan,&lock->lk_lock);
+	wchan_wakeone(lock->lk_wchan,&lock->lk_lock);
 	
 	spinlock_release(&lock->lk_lock);
 }

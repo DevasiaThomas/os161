@@ -120,9 +120,9 @@ male(uint32_t index)
 {	
 	male_start(index);
 
-	V(sem_maleF);
-	V(sem_maleMM);
-	P(sem_femaleM);
+	//V(sem_maleF);
+	//V(sem_maleMM);
+	//P(sem_femaleM);
 	P(sem_matchmakerM);
 
 	male_end(index);
@@ -133,9 +133,9 @@ void
 female(uint32_t index)
 {	female_start(index);
 
-	V(sem_femaleM);
-	V(sem_femaleMM);
-	P(sem_maleF);
+	//V(sem_femaleM);
+	//V(sem_femaleMM);
+	//P(sem_maleF);
 	P(sem_matchmakerF);
 
 	female_end(index);
@@ -149,8 +149,8 @@ matchmaker(uint32_t index)
 
 	V(sem_matchmakerM);
 	V(sem_matchmakerF);
-	P(sem_maleMM);
-	P(sem_femaleMM);
+	//P(sem_maleMM);
+	//P(sem_femaleMM);
 
 	matchmaker_end(index);
 
