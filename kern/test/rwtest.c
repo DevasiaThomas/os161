@@ -88,7 +88,7 @@ int rwtest(int nargs, char **args) {
 	}
 	if(donesem == NULL){
 		donesem = sem_create("donesem",0);
-		if(rwlock == NULL){
+		if(donesem == NULL){
 			panic("synchtest: sem_create failed\n");	
 		}
 	}
@@ -102,6 +102,7 @@ int rwtest(int nargs, char **args) {
 		switch (i % 3) {
 			case 1:
 				c_writer++;
+
 				result = thread_fork("writer", NULL, writer_thread, NULL, i);
 				break;
 			default:
@@ -124,7 +125,7 @@ int rwtest(int nargs, char **args) {
 	rwlock = NULL;	
 
 	kprintf_n("rwtest done\n");
-	success(test_status, SECRET, "sy5");
+	success(test_status, SECRET, "rwt1");
 
 	//kprintf_n("rwt1 unimplemented\n");
 	//success(FAIL, SECRET, "rwt1");
@@ -142,15 +143,59 @@ int rwtest2(int nargs, char **args) {
 	return 0;
 }
 
+static
+void
+rwt3thread(void *junk, unsigned long index)
+{
+	(void)junk;
+
+	switch(index) {
+		case 0:
+			rwlock_acquire_read(rwlock);
+			P(donesem);
+			break;
+		case 1:
+			ksecprintf(SECRET, "should panic...", "rwt3");
+			rwlock_release_read(rwlock);
+			V(donesem);
+			break;
+		case 2:
+			rwlock_acquire_write(rwlock);
+			P(donesem);
+			break;
+		case 3:
+			ksecprintf(SECRET, "should panic...", "rwt4");
+			V(donesem);
+			break;
+	}
+	//should not get here on success
+	V(donesem);	
+	success(FAIL, SECRET, "rwt3");
+	rwlock_destroy(rwlock);
+	rwlock = NULL;
+
+}
+
 int rwtest3(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
 	
-	int i;
-
+	int result;
+	if(rwlock == NULL){
+		rwlock = rwlock_create("reader_writer_lock");
+		if(rwlock == NULL){
+			panic("synchtest: rwlock_create failed\n");	
+		}
+	}
+	if(donesem == NULL){
+		donesem = sem_create("donesem",0);
+		if(donesem == NULL){
+			panic("synchtest: sem_create failed\n");	
+		}
+	}
 	kprintf_n("Starting rwt3...\n");
 	kprintf_n("(This test panics on success!)\n");
-	for (i=0; i<CREATELOOPS; i++) {
+	/*for (i=0; i<CREATELOOPS; i++) {
 		rwlock = rwlock_create("rwlock");
 		if (rwlock == NULL) {
 			panic("rwt3: lock_create failed\n");
@@ -159,13 +204,17 @@ int rwtest3(int nargs, char **args) {
 			rwlock_destroy(rwlock);
 		}
 	}
-
-	ksecprintf(SECRET, "Should panic...", "lt2");
-	rwlock_release_read(rwlock);
+*/
+	result = thread_fork("writer", NULL, rwt3thread, NULL, 0);
+	result = thread_fork("writer", NULL, rwt3thread, NULL, 1);
+	if (result) {
+		panic("rwtest: thread_fork failed: (%s)\n", strerror(result));
+	}//ksecprintf(SECRET, "Should panic...", "rwt3");
+	//rwlock_release_read(rwlock);
 
 	/* Should not get here on success. */
-
-	success(FAIL, SECRET, "lt2");
+	P(donesem);
+	success(FAIL, SECRET, "rwt3");
 
 	rwlock_destroy(rwlock);
 	rwlock = NULL;
@@ -181,11 +230,22 @@ int rwtest3(int nargs, char **args) {
 int rwtest4(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
-	int i;
-
+	int result;
+	if(rwlock == NULL){
+		rwlock = rwlock_create("reader_writer_lock");
+		if(rwlock == NULL){
+			panic("synchtest: rwlock_create failed\n");	
+		}
+	}
+	if(donesem == NULL){
+		donesem = sem_create("donesem",0);
+		if(donesem == NULL){
+			panic("synchtest: sem_create failed\n");	
+		}
+	}
 	kprintf_n("Starting rwt4...\n");
 	kprintf_n("(This test panics on success!)\n");
-	for (i=0; i<CREATELOOPS; i++) {
+/*	for (i=0; i<CREATELOOPS; i++) {
 		rwlock = rwlock_create("rwlock");
 		if (rwlock == NULL) {
 			panic("rwt4: rwlock_create failed\n");
@@ -194,14 +254,20 @@ int rwtest4(int nargs, char **args) {
 			rwlock_destroy(rwlock);
 		}
 	}
+*/
+	result = thread_fork("writer", NULL, rwt3thread, NULL, 2);
+	result = thread_fork("writer", NULL, rwt3thread, NULL, 3);
+	if (result) {
+		panic("rwtest: thread_fork failed: (%s)\n", strerror(result));
+	}
 
-	ksecprintf(SECRET, "Should panic...", "lt2");
-	rwlock_acquire_read(rwlock);
-	rwlock_destroy(rwlock);
+//	ksecprintf(SECRET, "Should panic...", "lt2");
+//	rwlock_acquire_read(rwlock);
+//	rwlock_destroy(rwlock);
 
 	/* Should not get here on success. */
-
-	success(FAIL, SECRET, "lt2");
+	P(donesem);
+	success(FAIL, SECRET, "rwt4");
 
 	rwlock_destroy(rwlock);
 	rwlock = NULL;
