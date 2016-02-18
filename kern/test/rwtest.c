@@ -13,6 +13,7 @@
 #include <spinlock.h>
 
 #define NTHREADS 32
+#define CREATELOOPS 8
 
 static struct semaphore *donesem = NULL;
 static struct rwlock *rwlock = NULL;
@@ -31,17 +32,17 @@ writer_thread(void *junk, unsigned long num)
 	//kprintf_n("writer thread: %lu waiting to write", num);
 
 	rwlock_acquire_write(rwlock);
+	kprintf_n("writer thread: %lu, %lu writers currently writing\n",num,++testval2);
 	spinlock_acquire(&status_lock);
 	if(testval1 != 0){
 		kprintf_n("rwtest failed: writer acquired the lock while readers had it\n");
 		test_status = FAIL;
 	}
-	if(testval2 !=0){
+	if(testval2 != 1){
 		kprintf_n("rwtest failed: writer acquired the lock while a writer had it\n");
 		test_status = FAIL;
 	}
 	spinlock_release(&status_lock);
-	kprintf_n("writer thread: %lu, %lu writers currently writing\n",num,++testval2);
 	kprintf_n("writer thread: %lu exiting, %lu writers now writing\n",num,--testval2);
 	rwlock_release_write(rwlock);
 	V(donesem);
@@ -119,7 +120,6 @@ int rwtest(int nargs, char **args) {
 	rwlock_destroy(rwlock);	
 	sem_destroy(donesem);
 	spinlock_cleanup(&splk);
-	spinlock_cleanup(&splk);
 	donesem = NULL;
 	rwlock = NULL;	
 
@@ -145,9 +145,35 @@ int rwtest2(int nargs, char **args) {
 int rwtest3(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
+	
+	int i;
 
-	kprintf_n("rwt3 unimplemented\n");
-	success(FAIL, SECRET, "rwt3");
+	kprintf_n("Starting rwt3...\n");
+	kprintf_n("(This test panics on success!)\n");
+	for (i=0; i<CREATELOOPS; i++) {
+		rwlock = rwlock_create("rwlock");
+		if (rwlock == NULL) {
+			panic("rwt3: lock_create failed\n");
+		}
+		if (i != CREATELOOPS - 1) {
+			rwlock_destroy(rwlock);
+		}
+	}
+
+	ksecprintf(SECRET, "Should panic...", "lt2");
+	rwlock_release_read(rwlock);
+
+	/* Should not get here on success. */
+
+	success(FAIL, SECRET, "lt2");
+
+	rwlock_destroy(rwlock);
+	rwlock = NULL;
+
+	return 0;
+
+//	kprintf_n("rwt3 unimplemented\n");
+//	success(FAIL, SECRET, "rwt3");
 
 	return 0;
 }
@@ -155,9 +181,35 @@ int rwtest3(int nargs, char **args) {
 int rwtest4(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
+	int i;
 
-	kprintf_n("rwt4 unimplemented\n");
-	success(FAIL, SECRET, "rwt4");
+	kprintf_n("Starting rwt4...\n");
+	kprintf_n("(This test panics on success!)\n");
+	for (i=0; i<CREATELOOPS; i++) {
+		rwlock = rwlock_create("rwlock");
+		if (rwlock == NULL) {
+			panic("rwt4: rwlock_create failed\n");
+		}
+		if (i != CREATELOOPS - 1) {
+			rwlock_destroy(rwlock);
+		}
+	}
+
+	ksecprintf(SECRET, "Should panic...", "lt2");
+	rwlock_acquire_read(rwlock);
+	rwlock_destroy(rwlock);
+
+	/* Should not get here on success. */
+
+	success(FAIL, SECRET, "lt2");
+
+	rwlock_destroy(rwlock);
+	rwlock = NULL;
+
+	return 0;
+
+	//kprintf_n("rwt4 unimplemented\n");
+	//success(FAIL, SECRET, "rwt4");
 
 	return 0;
 }

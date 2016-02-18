@@ -159,12 +159,17 @@ void cv_broadcast(struct cv *cv, struct lock *lock);
 #define RW_WRITER_ON_THE_WAY 3
 #define RW_FREE 4
 
+
 struct rwlock {
-        char *rwlock_name;
+	char *rwlock_name;
 	unsigned status;
+	unsigned writer_status;
 	struct wchan *rw_wchan;
+	volatile struct thread *writer_with_lock;
 	volatile int c_readers;
+	int max_readers;
 	struct spinlock rw_spinlock;
+	struct thread **readers;
         // add what you need here
         // (don't forget to mark things volatile as needed)
 };

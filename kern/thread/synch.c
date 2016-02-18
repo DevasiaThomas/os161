@@ -352,7 +352,9 @@ rwlock_create(const char *name)
 	spinlock_init(&rwlock->rw_spinlock);
 	// add stuff here as needed
 	rwlock->c_readers = 0;
+	rwlock->readers = kmalloc(200*sizeof(struct thread *)); 
 	rwlock->status = RW_FREE;
+	rwlock->writer_with_lock = NULL;
 	return rwlock;
 }
 
@@ -364,6 +366,7 @@ rwlock_destroy(struct rwlock *rwlock)
 	
 	spinlock_cleanup(&rwlock->rw_spinlock);
 	wchan_destroy(rwlock->rw_wchan);
+	kfree(rwlock->readers);
 	kfree(rwlock->rwlock_name);
 	kfree(rwlock);
 }
@@ -375,10 +378,13 @@ rwlock_acquire_read(struct rwlock *rwlock)
 	KASSERT(curthread->t_in_interrupt == false);	
 
 	spinlock_acquire(&rwlock->rw_spinlock);
-	while(rwlock->status == RW_WRITE || rwlock->status == RW_WRITER_WAITING) {
+	while(rwlock->status == RW_WRITE || rwlock->writer_status == RW_WRITER_WAITING || rwlock->writer_status == RW_WRITER_ON_THE_WAY) {
 		wchan_sleep(rwlock->rw_wchan, &rwlock->rw_spinlock);
 	}
+	KASSERT(rwlock->status == RW_FREE || rwlock->status == RW_READ);
+	rwlock->readers[rwlock->c_readers] = curthread;
 	rwlock->c_readers++;
+	rwlock->max_readers = rwlock->c_readers;
 	rwlock->status = RW_READ;
 	spinlock_release(&rwlock->rw_spinlock);	
 }
@@ -387,15 +393,28 @@ void
 rwlock_release_read(struct rwlock *rwlock)
 {
 	KASSERT(rwlock != NULL);
+	KASSERT(rwlock->status == RW_READ);
+	KASSERT(rwlock->c_readers > 0);
 	
 	spinlock_acquire(&rwlock->rw_spinlock);
+	int i = 0;
+	while(i < rwlock->max_readers && (rwlock->readers[i] != curthread || rwlock->readers[i] == 0)) {
+		i++;
+	}
+	if(i == rwlock->max_readers) {
+		panic("thread does not hold the lock\n");
+	}
+	rwlock->readers[i] = 0;
 	rwlock->c_readers--;
 	if(rwlock->c_readers == 0){
-		if(rwlock->status != RW_WRITER_WAITING){
+		rwlock->max_readers = 0;
+		if(rwlock->writer_status == RW_WRITER_WAITING){
 			rwlock->status = RW_FREE;
+			rwlock->writer_status = RW_WRITER_ON_THE_WAY;
 		}
 		else{
-			rwlock->status = RW_WRITER_ON_THE_WAY;
+			rwlock->status = RW_FREE;
+			rwlock->writer_status = RW_FREE;
 		}
 		wchan_wakeall(rwlock->rw_wchan,&rwlock->rw_spinlock);
 	}
@@ -409,11 +428,13 @@ rwlock_acquire_write(struct rwlock *rwlock)
 	KASSERT(curthread->t_in_interrupt == false);
 	
 	spinlock_acquire(&rwlock->rw_spinlock);
-	while(rwlock->status == RW_READ || rwlock->status == RW_WRITE || rwlock->status == RW_WRITER_WAITING) {
-		rwlock->status = RW_WRITER_WAITING;
+	while(rwlock->status == RW_READ || rwlock->status == RW_WRITE || rwlock->writer_status == RW_WRITER_WAITING) {
+		rwlock->writer_status = RW_WRITER_WAITING;
 		wchan_sleep(rwlock->rw_wchan, &rwlock->rw_spinlock);
 	}
-	KASSERT(rwlock->status == RW_FREE || rwlock->status == RW_WRITER_ON_THE_WAY);
+	KASSERT(rwlock->status == RW_FREE || rwlock->writer_status == RW_WRITER_ON_THE_WAY);
+	rwlock->writer_with_lock = curthread;
+	rwlock->writer_status = RW_FREE;
 	rwlock->status = RW_WRITE;
 	spinlock_release(&rwlock->rw_spinlock);	
 }
@@ -422,9 +443,13 @@ void
 rwlock_release_write(struct rwlock *rwlock) 
 {
 	KASSERT(rwlock != NULL);
-		
+	KASSERT(rwlock->status == RW_WRITE);
+	KASSERT(rwlock->writer_with_lock == curthread);
+	
 	spinlock_acquire(&rwlock->rw_spinlock);
 	rwlock->status = RW_FREE;
+	rwlock->writer_status = RW_FREE;
+	rwlock->writer_with_lock = NULL;
 	wchan_wakeall(rwlock->rw_wchan,&rwlock->rw_spinlock);
 	spinlock_release(&rwlock->rw_spinlock);
 }
