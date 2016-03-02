@@ -1,4 +1,4 @@
-ll the contents of this file are overwritten during automated
+/* all the contents of this file are overwritten during automated
  * testing. Please consider this before changing anything in this file.
  *  */
 
