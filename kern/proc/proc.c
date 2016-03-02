@@ -77,7 +77,7 @@ proc_create(const char *name)
 
     /* initialize file table */
     unsigned i;
-    for(i = 0;i < MAX_OPEN; i++ ) {
+    for(i = 0;i < OPEN_MAX; i++ ) {
          proc->file_table[i] = NULL;
     }
 

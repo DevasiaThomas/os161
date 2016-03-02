@@ -35,7 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-
+#include <filesys.h>
 
 /*
  * System call dispatcher.
@@ -123,8 +123,12 @@ syscall(struct trapframe *tf)
         break;
 
         case SYS_write:
-        err = sys_write(tf->tf_a0, (userptr_t)tf->tf_a1, (size_t)tf->tf_a2, &retval);
-        break;
+        {
+            size_t nbytes_written;
+            err = sys_write(tf->tf_a0, (userptr_t)tf->tf_a1, (size_t)tf->tf_a2, &nbytes_written);
+            retval = (int32_t)nbytes_written;
+            break;
+        }
 
         case SYS_lseek:
         /* this one is tricky as offset argument (2nd argument) is of 64 bits which will take a2 and a3 both
@@ -135,15 +139,23 @@ syscall(struct trapframe *tf)
         break;
 
         case SYS_dup2:
-        err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
-        break;
+        {
+            err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
+            break;
+        }
 
         case SYS_chdir:
-        err = sys_chdir((userptr_t)tf->tf_a0);
-        break;
+        {
+            err = sys_chdir((userptr_t)tf->tf_a0);
+            break;
+        }
 
         case SYS___getcwd:
-        err = sys___getcwd((userptr_t)tf->tf_v0, (size_t)tf->tf_a1, &retval);
+        {
+            size_t nbytes_written;
+            err = sys___getcwd((userptr_t)tf->tf_v0, (size_t)tf->tf_a1, &nbytes_written);
+            retval = (int32_t)nbytes_written;
+        }
 
 
 

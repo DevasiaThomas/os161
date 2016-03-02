@@ -44,6 +44,8 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <filesys.h>
+#include <synch.h>
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -108,7 +110,7 @@ runprogram(char *progname)
     if(result) {
          return result;
     }
-    struct file_descriptor fd_stdin;
+    struct file_descriptor *fd_stdin = kmalloc(sizeof(struct file_descriptor));
     strcpy(fd_stdin->filename,"con_stdin");
     fd_stdin->flags = O_RDONLY;
     fd_stdin->ref_count = 1;
@@ -122,7 +124,7 @@ runprogram(char *progname)
     if(result) {
          return result;
     }
-    struct file_descriptor fd_stdout;
+    struct file_descriptor *fd_stdout = kmalloc(sizeof(struct file_descriptor));
     strcpy(fd_stdin->filename,"con_stdout");
     fd_stdout->flags = O_WRONLY;
     fd_stdout->ref_count = 1;
@@ -136,13 +138,13 @@ runprogram(char *progname)
     if(result) {
          return result;
     }
-    struct file_descriptor fd_stdin;
+    struct file_descriptor *fd_stderr = kmalloc(sizeof(struct file_descriptor));
     strcpy(fd_stdin->filename,"con_stderr");
     fd_stderr->flags = O_RDONLY;
     fd_stderr->ref_count = 1;
-    fd_stderrn->fdlock = lock_create("con_stderr");
+    fd_stderr->fdlock = lock_create("con_stderr");
     fd_stderr->offset = 0;
-    fd_stderrn->vn = std_err;
+    fd_stderr->vn = std_err;
 
     curproc->file_table[0] = fd_stdin;
     curproc->file_table[1] = fd_stdout;
