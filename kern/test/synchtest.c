@@ -40,7 +40,7 @@
 #include <thread.h>
 #include <synch.h>
 #include <test.h>
-#include <kern/secret.h>
+#include <kern/test161.h>
 #include <spinlock.h>
 
 #define CREATELOOPS		8
@@ -64,7 +64,7 @@ static struct cv *testcv = NULL;
 static struct semaphore *donesem = NULL;
 
 struct spinlock status_lock;
-static bool test_status = FAIL;
+static bool test_status = TEST161_FAIL;
 
 static unsigned long semtest_current;
 
@@ -73,7 +73,7 @@ bool
 failif(bool condition) {
 	if (condition) {
 		spinlock_acquire(&status_lock);
-		test_status = FAIL;
+		test_status = TEST161_FAIL;
 		spinlock_release(&status_lock);
 	}
 	return condition;
@@ -132,7 +132,7 @@ semtest(int nargs, char **args)
 		}
 	}
 	spinlock_init(&status_lock);
-	test_status = SUCCESS;
+	test_status = TEST161_SUCCESS;
 
 	kprintf_n("If this hangs, it's broken: ");
 	P(testsem);
@@ -265,7 +265,7 @@ locktest(int nargs, char **args)
 		}
 	}
 	spinlock_init(&status_lock);
-	test_status = SUCCESS;
+	test_status = TEST161_SUCCESS;
 
 	for (i=0; i<NTHREADS; i++) {
 		kprintf_t(".");
@@ -303,12 +303,12 @@ locktest2(int nargs, char **args) {
 		panic("lt2: lock_create failed\n");
 	}
 
-	ksecprintf(SECRET, "Should panic...", "lt2");
+	secprintf(SECRET, "Should panic...", "lt2");
 	lock_release(testlock);
 
 	/* Should not get here on success. */
 
-	success(FAIL, SECRET, "lt2");
+	success(TEST161_FAIL, SECRET, "lt2");
 
 	lock_destroy(testlock);
 	testlock = NULL;
@@ -329,13 +329,13 @@ locktest3(int nargs, char **args) {
 		panic("lt3: lock_create failed\n");
 	}
 
-	ksecprintf(SECRET, "Should panic...", "lt3");
+	secprintf(SECRET, "Should panic...", "lt3");
 	lock_acquire(testlock);
 	lock_destroy(testlock);
 
 	/* Should not get here on success. */
 
-	success(FAIL, SECRET, "lt3");
+	success(TEST161_FAIL, SECRET, "lt3");
 
 	testlock = NULL;
 
@@ -427,7 +427,7 @@ cvtest(int nargs, char **args)
 		}
 	}
 	spinlock_init(&status_lock);
-	test_status = SUCCESS;
+	test_status = TEST161_SUCCESS;
 
 	testval1 = NTHREADS-1;
 	for (i=0; i<NTHREADS; i++) {
@@ -563,7 +563,7 @@ cvtest2(int nargs, char **args)
 		testcvs[i] = cv_create("cvtest2 cv");
 	}
 	spinlock_init(&status_lock);
-	test_status = SUCCESS;
+	test_status = TEST161_SUCCESS;
 
 	result = thread_fork("cvt2", NULL, sleepthread, NULL, 0);
 	if (result) {
@@ -610,12 +610,12 @@ cvtest3(int nargs, char **args) {
 		panic("cvt3: cv_create failed\n");
 	}
 
-	ksecprintf(SECRET, "Should panic...", "cvt3");
+	secprintf(SECRET, "Should panic...", "cvt3");
 	cv_wait(testcv, testlock);
 
 	/* Should not get here on success. */
 
-	success(FAIL, SECRET, "cvt3");
+	success(TEST161_FAIL, SECRET, "cvt3");
 
 	lock_destroy(testlock);
 	cv_destroy(testcv);
@@ -642,12 +642,12 @@ cvtest4(int nargs, char **args) {
 		panic("cvt4: cv_create failed\n");
 	}
 
-	ksecprintf(SECRET, "Should panic...", "cvt4");
+	secprintf(SECRET, "Should panic...", "cvt4");
 	cv_broadcast(testcv, testlock);
 
 	/* Should not get here on success. */
 
-	success(FAIL, SECRET, "cvt4");
+	success(TEST161_FAIL, SECRET, "cvt4");
 
 	lock_destroy(testlock);
 	cv_destroy(testcv);
@@ -727,7 +727,7 @@ cvtest5(int nargs, char **args) {
 		panic("cvt5: sem_create failed\n");
 	}
 	spinlock_init(&status_lock);
-	test_status = SUCCESS;
+	test_status = TEST161_SUCCESS;
 	testval1 = 0;
 
 	lock_acquire(testlock);

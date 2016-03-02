@@ -9,7 +9,7 @@
 #include <thread.h>
 #include <synch.h>
 #include <test.h>
-#include <kern/secret.h>
+#include <kern/test161.h>
 #include <spinlock.h>
 
 #define NTHREADS 32
@@ -78,26 +78,26 @@ int rwtest(int nargs, char **args) {
 	unsigned i;
 	testval1 = 0;
 	testval2 = 0;
-	int result;	
+	int result;
 	test_status = SUCCESS;
 	if(rwlock == NULL){
 		rwlock = rwlock_create("reader_writer_lock");
 		if(rwlock == NULL){
-			panic("synchtest: rwlock_create failed\n");	
+			panic("synchtest: rwlock_create failed\n");
 		}
 	}
 	if(donesem == NULL){
 		donesem = sem_create("donesem",0);
 		if(donesem == NULL){
-			panic("synchtest: sem_create failed\n");	
+			panic("synchtest: sem_create failed\n");
 		}
 	}
 	spinlock_init(&splk);
 	spinlock_init(&status_lock);
-	
+
 	kprintf_n("rwtest started\n");
 	int c_reader=0,c_writer=0;
-	
+
 	for(i = 0; i < NTHREADS*5; i++) {
 		switch (i % 3) {
 			case 1:
@@ -114,15 +114,15 @@ int rwtest(int nargs, char **args) {
 			panic("rwtest: thread_fork failed: (%s)\n", strerror(result));
 		}
 	}
-	
+
 	for(i = 0; i < NTHREADS*5; i++) {
 		P(donesem);
 	}
-	rwlock_destroy(rwlock);	
+	rwlock_destroy(rwlock);
 	sem_destroy(donesem);
 	spinlock_cleanup(&splk);
 	donesem = NULL;
-	rwlock = NULL;	
+	rwlock = NULL;
 
 	kprintf_n("rwtest done\n");
 	success(test_status, SECRET, "rwt1");
@@ -138,7 +138,7 @@ int rwtest2(int nargs, char **args) {
 	(void)args;
 
 	kprintf_n("rwt2 unimplemented\n");
-	success(FAIL, SECRET, "rwt2");
+	success(TEST161_FAIL, SECRET, "rwt2");
 
 	return 0;
 }
@@ -169,7 +169,7 @@ rwt3thread(void *junk, unsigned long index)
 			break;
 	}
 	//should not get here on success
-	V(donesem);	
+	V(donesem);
 	success(FAIL, SECRET, "rwt3");
 	rwlock_destroy(rwlock);
 	rwlock = NULL;
@@ -179,18 +179,18 @@ rwt3thread(void *junk, unsigned long index)
 int rwtest3(int nargs, char **args) {
 	(void)nargs;
 	(void)args;
-	
+
 	int result;
 	if(rwlock == NULL){
 		rwlock = rwlock_create("reader_writer_lock");
 		if(rwlock == NULL){
-			panic("synchtest: rwlock_create failed\n");	
+			panic("synchtest: rwlock_create failed\n");
 		}
 	}
 	if(donesem == NULL){
 		donesem = sem_create("donesem",0);
 		if(donesem == NULL){
-			panic("synchtest: sem_create failed\n");	
+			panic("synchtest: sem_create failed\n");
 		}
 	}
 	kprintf_n("Starting rwt3...\n");
@@ -234,13 +234,13 @@ int rwtest4(int nargs, char **args) {
 	if(rwlock == NULL){
 		rwlock = rwlock_create("reader_writer_lock");
 		if(rwlock == NULL){
-			panic("synchtest: rwlock_create failed\n");	
+			panic("synchtest: rwlock_create failed\n");
 		}
 	}
 	if(donesem == NULL){
 		donesem = sem_create("donesem",0);
 		if(donesem == NULL){
-			panic("synchtest: sem_create failed\n");	
+			panic("synchtest: sem_create failed\n");
 		}
 	}
 	kprintf_n("Starting rwt4...\n");
@@ -285,7 +285,7 @@ int rwtest5(int nargs, char **args) {
 	(void)args;
 
 	kprintf_n("rwt5 unimplemented\n");
-	success(FAIL, SECRET, "rwt5");
+	success(TEST161_FAIL, SECRET, "rwt5");
 
 	return 0;
 }
