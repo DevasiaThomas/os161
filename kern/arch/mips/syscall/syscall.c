@@ -35,7 +35,7 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-
+#include <filesys.h>
 
 /*
  * System call dispatcher.
@@ -101,36 +101,84 @@ syscall(struct trapframe *tf)
 
 	switch (callno) {
 	    case SYS_reboot:
-		err = sys_reboot(tf->tf_a0);
-		break;
+	    err = sys_reboot(tf->tf_a0);
+	    break;
 
 	    case SYS___time:
-		err = sys___time((userptr_t)tf->tf_a0,
-				 (userptr_t)tf->tf_a1);
-		break;
+	    err = sys___time((userptr_t)tf->tf_a0,
+	    		 (userptr_t)tf->tf_a1);
+	    break;
 
 	    /* Add stuff here */
+        case SYS_open:
+        err = sys_open((userptr_t)tf->tf_a0, tf->tf_a1, tf->tf_a2, &retval);
+        break;
+
+        case SYS_close:
+        /* to be written by Sam */
+        break;
+
+        case SYS_read:
+        /* to be written by Sam */
+        break;
+
+        case SYS_write:
+        {
+            size_t nbytes_written;
+            err = sys_write(tf->tf_a0, (userptr_t)tf->tf_a1, (size_t)tf->tf_a2, &nbytes_written);
+            retval = (int32_t)nbytes_written;
+            break;
+        }
+
+        case SYS_lseek:
+        /* this one is tricky as offset argument (2nd argument) is of 64 bits which will take a2 and a3 both
+         * plus whence argument (3rd arg) will be on stack as all a0-14 are occupied.
+         * return value is also an offset wwhich is again 64 bits. so you need to devide it into two parts.
+         * most significant 32 bits in retval(which ultimately will be stored in v0)  and least significant 32 bits on v1.
+         */
+        break;
+
+        case SYS_dup2:
+        {
+            err = sys_dup2(tf->tf_a0, tf->tf_a1, &retval);
+            break;
+        }
+
+        case SYS_chdir:
+        {
+            err = sys_chdir((userptr_t)tf->tf_a0);
+            break;
+        }
+
+        case SYS___getcwd:
+        {
+            size_t nbytes_written;
+            err = sys___getcwd((userptr_t)tf->tf_v0, (size_t)tf->tf_a1, &nbytes_written);
+            retval = (int32_t)nbytes_written;
+        }
+
+
 
 	    default:
-		kprintf("Unknown syscall %d\n", callno);
-		err = ENOSYS;
-		break;
+	    kprintf("Unknown syscall %d\n", callno);
+        err = ENOSYS;
+	    break;
 	}
 
 
 	if (err) {
-		/*
-		 * Return the error code. This gets converted at
-		 * userlevel to a return value of -1 and the error
-		 * code in errno.
-		 */
-		tf->tf_v0 = err;
-		tf->tf_a3 = 1;      /* signal an error */
+	    /*
+	     * Return the error code. This gets converted at
+	     * userlevel to a return value of -1 and the error
+	     * code in errno.
+	     */
+	    tf->tf_v0 = err;
+	    tf->tf_a3 = 1;      /* signal an error */
 	}
 	else {
-		/* Success. */
-		tf->tf_v0 = retval;
-		tf->tf_a3 = 0;      /* signal no error */
+	    /* Success. */
+	    tf->tf_v0 = retval;
+	    tf->tf_a3 = 0;      /* signal no error */
 	}
 
 	/*

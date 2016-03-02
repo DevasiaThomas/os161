@@ -310,12 +310,12 @@ file      ../common/libc/string/strrchr.c
 file      ../common/libc/string/strtok_r.c
 
 #
-# Security functions that we've added to the C library and
-# use for secure output.
+# libtest161 shared code and security functions
 #
 
-file      ../common/libc/secure/secure.c
-file      ../common/libc/secure/sha256.c
+file      ../common/libtest161/test161.c
+file      ../common/libtest161/secure.c
+file      ../common/libtest161/sha256.c
 
 ########################################
 #                                      #
@@ -384,6 +384,7 @@ file      vfs/devnull.c
 file      syscall/loadelf.c
 file      syscall/runprogram.c
 file      syscall/time_syscalls.c
+file      syscall/file_syscalls.c
 
 #
 # Startup and initialization
@@ -442,7 +443,7 @@ file		test/threadlisttest.c
 file		test/threadtest.c
 file		test/tt3.c
 file		test/synchtest.c
-file		test/rwtest.c
+file        test/rwtest.c
 file		test/semunit.c
 file		test/hmacunit.c
 file		test/kmalloctest.c

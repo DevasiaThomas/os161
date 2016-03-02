@@ -37,6 +37,8 @@
  */
 
 #include <spinlock.h>
+#include <filesys.h>
+#include <limits.h>
 
 struct addrspace;
 struct thread;
@@ -59,18 +61,23 @@ struct vnode;
  * thread_switch needs to be able to fetch the current address space
  * without sleeping.
  */
+
 struct proc {
 	char *p_name;			/* Name of this process */
 	struct spinlock p_lock;		/* Lock for this structure */
 	unsigned p_numthreads;		/* Number of threads in this process */
+    int pid; /* pid of the prrocess */
 
-	/* VM */
+    /* VM */
 	struct addrspace *p_addrspace;	/* virtual address space */
 
 	/* VFS */
 	struct vnode *p_cwd;		/* current working directory */
 
 	/* add more material here as needed */
+
+    struct file_descriptor *file_table[OPEN_MAX]; /* file descriptor table */
+
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

@@ -44,6 +44,8 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <filesys.h>
+#include <synch.h>
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -62,7 +64,7 @@ runprogram(char *progname)
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {
-		return result;
+	    return result;
 	}
 
 	/* We should be a new process. */
@@ -71,8 +73,8 @@ runprogram(char *progname)
 	/* Create a new address space. */
 	as = as_create();
 	if (as == NULL) {
-		vfs_close(v);
-		return ENOMEM;
+	    vfs_close(v);
+	    return ENOMEM;
 	}
 
 	/* Switch to it and activate it. */
@@ -82,9 +84,9 @@ runprogram(char *progname)
 	/* Load the executable. */
 	result = load_elf(v, &entrypoint);
 	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
-		vfs_close(v);
-		return result;
+    	/* p_addrspace will go away when curproc is destroyed */
+	    vfs_close(v);
+	    return result;
 	}
 
 	/* Done with the file now. */
@@ -93,14 +95,67 @@ runprogram(char *progname)
 	/* Define the user stack in the address space */
 	result = as_define_stack(as, &stackptr);
 	if (result) {
-		/* p_addrspace will go away when curproc is destroyed */
-		return result;
+	    /* p_addrspace will go away when curproc is destroyed */
+	    return result;
 	}
+
+    /* initilize console */
+
+    char pathname[5];
+    strcpy(pathname,"con:");
+
+    /* stdin */
+    struct vnode *std_in;
+    result = vfs_open(pathname, O_RDONLY, 0664, &std_in);
+    if(result) {
+         return result;
+    }
+    struct file_descriptor *fd_stdin = kmalloc(sizeof(struct file_descriptor));
+    strcpy(fd_stdin->filename,"con_stdin");
+    fd_stdin->flags = O_RDONLY;
+    fd_stdin->ref_count = 1;
+    fd_stdin->fdlock = lock_create("con_stdin");
+    fd_stdin->offset = 0;
+    fd_stdin->vn = std_in;
+
+    /* stdout */
+    struct vnode *std_out;
+    strcpy(pathname,"con:");
+    result = vfs_open(pathname, O_WRONLY, 0664, &std_out);
+    if(result) {
+         return result;
+    }
+    struct file_descriptor *fd_stdout = kmalloc(sizeof(struct file_descriptor));
+    strcpy(fd_stdin->filename,"con_stdout");
+    fd_stdout->flags = O_WRONLY;
+    fd_stdout->ref_count = 1;
+    fd_stdout->fdlock = lock_create("con_stdout");
+    fd_stdout->offset = 0;
+    fd_stdout->vn = std_out;
+
+    /* stderr */
+    struct vnode *std_err;
+    strcpy(pathname,"con:");
+    result = vfs_open(pathname, O_WRONLY, 0664, &std_err);
+    if(result) {
+         return result;
+    }
+    struct file_descriptor *fd_stderr = kmalloc(sizeof(struct file_descriptor));
+    strcpy(fd_stdin->filename,"con_stderr");
+    fd_stderr->flags = O_RDONLY;
+    fd_stderr->ref_count = 1;
+    fd_stderr->fdlock = lock_create("con_stderr");
+    fd_stderr->offset = 0;
+    fd_stderr->vn = std_err;
+
+    curproc->file_table[0] = fd_stdin;
+    curproc->file_table[1] = fd_stdout;
+    curproc->file_table[2] = fd_stderr;
 
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
-			  NULL /*userspace addr of environment*/,
-			  stackptr, entrypoint);
+	        NULL /*userspace addr of environment*/,
+	        stackptr, entrypoint);
 
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");
