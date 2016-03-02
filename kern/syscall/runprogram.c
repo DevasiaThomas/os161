@@ -120,6 +120,7 @@ runprogram(char *progname)
 
     /* stdout */
     struct vnode *std_out;
+    strcpy(pathname,"con:");
     result = vfs_open(pathname, O_WRONLY, 0664, &std_out);
     if(result) {
          return result;
@@ -134,6 +135,7 @@ runprogram(char *progname)
 
     /* stderr */
     struct vnode *std_err;
+    strcpy(pathname,"con:");
     result = vfs_open(pathname, O_WRONLY, 0664, &std_err);
     if(result) {
          return result;
