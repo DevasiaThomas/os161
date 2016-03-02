@@ -48,6 +48,8 @@
 #include <current.h>
 #include <addrspace.h>
 #include <vnode.h>
+#include <limits.h>
+#include <filesys.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -73,6 +75,13 @@ proc_create(const char *name)
 		return NULL;
 	}
 
+    /* initialize file table */
+    unsigned i;
+    for(i = 0;i < MAX_OPEN; i++ ) {
+         proc->file_table[i] = NULL;
+    }
+
+    proc->pid = -1; //initialize to -1
 	proc->p_numthreads = 0;
 	spinlock_init(&proc->p_lock);
 
