@@ -47,14 +47,18 @@
 #include <proc.h>
 #include <current.h>
 #include <addrspace.h>
+#include <synch.h>
 #include <vnode.h>
 #include <limits.h>
-#include <filesys.h>
+#include <file_descriptor.h>
+#include <process_desccriptor.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
+struct lock *proc_lock;
+struct process_descriptor *process_table[PID_LIMIT];
 
 /*
  * Create a proc structure.
@@ -82,14 +86,68 @@ proc_create(const char *name)
     }
 
     proc->pid = -1; //initialize to -1
-	proc->p_numthreads = 0;
-	spinlock_init(&proc->p_lock);
+    proc->p_numthreads = 0;
+    spinlock_init(&proc->p_lock);
 
-	/* VM fields */
-	proc->p_addrspace = NULL;
+    /* VM fields */
+    proc->p_addrspace = NULL;
 
-	/* VFS fields */
-	proc->p_cwd = NULL;
+    /* VFS fields */
+    proc->p_cwd = NULL;
+
+    if(proc_lock == NULL) {
+         proc_lock = lock_create("proc_lock");
+         if(proc_lock == NULL) {
+             return NULL;
+         }
+    }
+
+    for(i = 0; i < PID_LIMIT; i++ ) {
+        lock_acquire(proc_lock);
+        if(process_table[i] == NULL) {
+            struct process_descriptor *pdesc = kmalloc(sizeof(struct process_descriptor));
+            if(pdesc == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
+                k_free(proc);
+                lock_release(proc_lock);
+                return NULL;
+            }
+
+            pdesc->wait_cv = cv_create(proc->p_name);
+            if(pdesc->wait_cv == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
+                kfree(pdesc);
+                kfree(proc);
+                lock_release(proc_lock);
+            }
+
+            pdesc->wait_lock = lock_create(proc->p_name);
+            if(pdesc->wait_lock == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
+                kfree(pdesc->wait_cv);
+                kfree(pdesc);
+                kfree(proc);
+                lock_release(proc_lock);
+            }
+
+            pdesc->running = true;
+            pdesc->exit_status = -1;
+            if(curproc == NULL) {
+                pdesc->ppid = -1;
+            }
+            else {
+                pdesc->ppid = curproc->p_pid;
+            }
+            proc->pid = i;
+            pdesc->proc = proc;
+
+            process_table[i] = pdesc;
+        }
+        lock_release(proc_lock);
+    }
 
 	return proc;
 }
