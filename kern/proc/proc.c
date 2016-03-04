@@ -146,8 +146,6 @@ proc_create(const char *name)
                 pdesc->ppid = curproc->pid;
             }
             proc->pid = i;
-            pdesc->process = proc;
-
             process_table[i] = pdesc;
             lock_release(proc_lock);
             break;

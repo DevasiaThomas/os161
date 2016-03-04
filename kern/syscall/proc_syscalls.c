@@ -20,8 +20,6 @@
 #include <proc.h>
 #include <file_descriptor.h>
 
-struct process_descriptor *process_table[PID_MAX];
-
 void childproc_init(void *tf, unsigned long junk);
 
 int

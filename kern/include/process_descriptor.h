@@ -14,7 +14,6 @@ struct process_descriptor {
     int exit_status;
     struct cv *wait_cv;
     struct lock *wait_lock;
-    struct proc *process;
 };
 
 void destroy_pdesc(struct process_descriptor);
