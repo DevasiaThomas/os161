@@ -35,7 +35,8 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-#include <filesys.h>
+#include <file_descriptor.h>
+
 
 /*
  * System call dispatcher.
@@ -155,9 +156,23 @@ syscall(struct trapframe *tf)
             size_t nbytes_written;
             err = sys___getcwd((userptr_t)tf->tf_v0, (size_t)tf->tf_a1, &nbytes_written);
             retval = (int32_t)nbytes_written;
+            break;
         }
 
+        case SYS_fork:
+        {
+            pid_t child_pid;
+            err = sys_fork(tf,&child_pid);
+            retval = (int32_t)child_pid;
+            break;
+        }
 
+        case SYS_getpid:
+        {
+            pid_t curpid = sys_getpid();
+            retval = (int32_t)curpid;
+            break;
+        }
 
 	    default:
 	    kprintf("Unknown syscall %d\n", callno);

@@ -17,7 +17,7 @@
 #include <uio.h>
 #include <copyinout.h>
 #include <proc.h>
-#include <filesys.h>
+#include <file_descriptor.h>
 
 int
 sys_open(userptr_t filename, int flags, int mode, int *fd)

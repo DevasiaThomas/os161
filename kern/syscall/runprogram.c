@@ -44,7 +44,7 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
-#include <filesys.h>
+#include <file_descriptor.h>
 #include <synch.h>
 
 /*

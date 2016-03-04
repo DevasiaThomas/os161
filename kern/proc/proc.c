@@ -41,20 +41,24 @@
  * Unless you're implementing multithreaded user processes, the only
  * process that will have more than one thread is the kernel process.
  */
-
+#include <kern/errno.h>
 #include <types.h>
 #include <spl.h>
 #include <proc.h>
 #include <current.h>
 #include <addrspace.h>
+#include <synch.h>
 #include <vnode.h>
 #include <limits.h>
-#include <filesys.h>
+#include <file_descriptor.h>
+#include <process_descriptor.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
+struct lock *proc_lock;
+struct process_descriptor *process_table[PID_MAX];
 
 /*
  * Create a proc structure.
@@ -82,14 +86,72 @@ proc_create(const char *name)
     }
 
     proc->pid = -1; //initialize to -1
-	proc->p_numthreads = 0;
-	spinlock_init(&proc->p_lock);
+    proc->p_numthreads = 0;
+    spinlock_init(&proc->p_lock);
 
-	/* VM fields */
-	proc->p_addrspace = NULL;
+    /* VM fields */
+    proc->p_addrspace = NULL;
 
-	/* VFS fields */
-	proc->p_cwd = NULL;
+    /* VFS fields */
+    proc->p_cwd = NULL;
+
+    if(strcmp(name,"[kernel]") == 0) {
+         return proc;
+    }
+
+    if(proc_lock == NULL) {
+         proc_lock = lock_create("proc_lock");
+         if(proc_lock == NULL) {
+             return NULL;
+         }
+    }
+
+    for(i = 0; i < PID_MAX; i++ ) {
+        lock_acquire(proc_lock);
+        if(process_table[i] == NULL) {
+            struct process_descriptor *pdesc = kmalloc(sizeof(struct process_descriptor));
+            if(pdesc == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
+                kfree(proc);
+                lock_release(proc_lock);
+                return NULL;
+            }
+
+            pdesc->wait_cv = cv_create(proc->p_name);
+            if(pdesc->wait_cv == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
+                kfree(pdesc);
+                kfree(proc);
+                lock_release(proc_lock);
+            }
+
+            pdesc->wait_lock = lock_create(proc->p_name);
+            if(pdesc->wait_lock == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
+                kfree(pdesc->wait_cv);
+                kfree(pdesc);
+                kfree(proc);
+                lock_release(proc_lock);
+            }
+
+            pdesc->running = true;
+            pdesc->exit_status = -1;
+            if(curproc == NULL) {
+                pdesc->ppid = -1;
+            }
+            else {
+                pdesc->ppid = curproc->pid;
+            }
+            proc->pid = i;
+            process_table[i] = pdesc;
+            lock_release(proc_lock);
+            break;
+        }
+        lock_release(proc_lock);
+    }
 
 	return proc;
 }
@@ -192,6 +254,43 @@ proc_bootstrap(void)
 		panic("proc_create for kproc failed\n");
 	}
 }
+
+struct proc *
+proc_fork(const char *name, int *err)
+{
+    struct proc *child_proc = proc_create(name);
+    if(child_proc->pid == -1) {
+        kfree(child_proc->p_name);
+        kfree(child_proc);
+        *err = ENPROC;
+    }
+
+    /* copy file table */
+    int i;
+    for(i = 0; i < OPEN_MAX; i++) {
+        if(curproc->file_table[i] != NULL) {
+            curproc->file_table[i]->ref_count++;
+        }
+        child_proc->file_table[i] = curproc->file_table[i];
+    }
+
+    int errnum;
+    /* set address_space */
+    if(curproc->p_addrspace != NULL) {
+         struct addrspace *child_as;
+         errnum = as_copy(curproc->p_addrspace, &child_as);
+         if(errnum) {
+            kfree(child_proc->p_name);
+            kfree(child_proc);
+            *err = errnum;
+            return NULL;
+         }
+         child_proc->p_addrspace = child_as;
+    }
+
+    return child_proc;
+}
+
 
 /*
  * Create a fresh proc for use by runprogram.
