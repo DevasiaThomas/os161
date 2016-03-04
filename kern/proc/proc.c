@@ -41,7 +41,7 @@
  * Unless you're implementing multithreaded user processes, the only
  * process that will have more than one thread is the kernel process.
  */
-
+#include <kern/errno.h>
 #include <types.h>
 #include <spl.h>
 #include <proc.h>
@@ -51,14 +51,14 @@
 #include <vnode.h>
 #include <limits.h>
 #include <file_descriptor.h>
-#include <process_desccriptor.h>
+#include <process_descriptor.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
 struct lock *proc_lock;
-struct process_descriptor *process_table[PID_LIMIT];
+struct process_descriptor *process_table[PID_MAX];
 
 /*
  * Create a proc structure.
@@ -95,6 +95,10 @@ proc_create(const char *name)
     /* VFS fields */
     proc->p_cwd = NULL;
 
+    if(strcmp(name,"[kernel]") == 0) {
+         return proc;
+    }
+
     if(proc_lock == NULL) {
          proc_lock = lock_create("proc_lock");
          if(proc_lock == NULL) {
@@ -102,14 +106,14 @@ proc_create(const char *name)
          }
     }
 
-    for(i = 0; i < PID_LIMIT; i++ ) {
+    for(i = 0; i < PID_MAX; i++ ) {
         lock_acquire(proc_lock);
         if(process_table[i] == NULL) {
             struct process_descriptor *pdesc = kmalloc(sizeof(struct process_descriptor));
             if(pdesc == NULL) {
                 spinlock_cleanup(&proc->p_lock);
                 kfree(proc->p_name);
-                k_free(proc);
+                kfree(proc);
                 lock_release(proc_lock);
                 return NULL;
             }
@@ -139,12 +143,14 @@ proc_create(const char *name)
                 pdesc->ppid = -1;
             }
             else {
-                pdesc->ppid = curproc->p_pid;
+                pdesc->ppid = curproc->pid;
             }
             proc->pid = i;
-            pdesc->proc = proc;
+            pdesc->process = proc;
 
             process_table[i] = pdesc;
+            lock_release(proc_lock);
+            break;
         }
         lock_release(proc_lock);
     }
@@ -250,6 +256,43 @@ proc_bootstrap(void)
 		panic("proc_create for kproc failed\n");
 	}
 }
+
+struct proc *
+proc_fork(const char *name, int *err)
+{
+    struct proc *child_proc = proc_create(name);
+    if(child_proc->pid == -1) {
+        kfree(child_proc->p_name);
+        kfree(child_proc);
+        *err = ENPROC;
+    }
+
+    /* copy file table */
+    int i;
+    for(i = 0; i < OPEN_MAX; i++) {
+        if(curproc->file_table[i] != NULL) {
+            curproc->file_table[i]->ref_count++;
+        }
+        child_proc->file_table[i] = curproc->file_table[i];
+    }
+
+    int errnum;
+    /* set address_space */
+    if(curproc->p_addrspace != NULL) {
+         struct addrspace *child_as;
+         errnum = as_copy(curproc->p_addrspace, &child_as);
+         if(errnum) {
+            kfree(child_proc->p_name);
+            kfree(child_proc);
+            *err = errnum;
+            return NULL;
+         }
+         child_proc->p_addrspace = child_as;
+    }
+
+    return child_proc;
+}
+
 
 /*
  * Create a fresh proc for use by runprogram.

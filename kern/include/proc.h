@@ -37,7 +37,8 @@
  */
 
 #include <spinlock.h>
-#include <filesys.h>
+#include <file_descriptor.h>
+#include <process_descriptor.h>
 #include <limits.h>
 
 struct addrspace;
@@ -80,6 +81,7 @@ struct proc {
 
 };
 
+
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 
@@ -88,6 +90,9 @@ void proc_bootstrap(void);
 
 /* Create a fresh process for use by runprogram(). */
 struct proc *proc_create_runprogram(const char *name);
+
+/* create the child process with same file table and addrspace. */
+struct proc *proc_fork(const char *name,int *err);
 
 /* Destroy a process. */
 void proc_destroy(struct proc *proc);

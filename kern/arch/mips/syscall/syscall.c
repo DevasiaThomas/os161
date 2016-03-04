@@ -35,7 +35,8 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
-#include <filesys.h>
+#include <file_descriptor.h>
+
 
 /*
  * System call dispatcher.

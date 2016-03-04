@@ -1,5 +1,5 @@
-#ifndef PROCSYS_H
-#define PROCSYS_H
+#ifndef PROC_DESCRIPTOR_H
+#define PROC_DESCRIPTOR_H
 
 #include <limits.h>
 #include <types.h>
@@ -15,3 +15,4 @@ struct process_descriptor {
 };
 
 void destroy_pdesc(struct process_descriptor);
+#endif

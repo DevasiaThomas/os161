@@ -1,5 +1,5 @@
-#ifndef FILESYS_H
-#define FILESYS_H
+#ifndef FILE_DESCRIPTOR_H
+#define FILE_DESCRIPTOR_H
 
 #include <limits.h>
 #include <types.h>

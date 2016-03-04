@@ -18,9 +18,9 @@
 #include <copyinout.h>
 #include <addrspace.h>
 #include <proc.h>
-#include <fie_descriptor.h>
+#include <file_descriptor.h>
 
-struct process_descriptor *process_table[PID_LIMIT];
+struct process_descriptor *process_table[PID_MAX];
 
 void childproc_init(void *tf, unsigned long junk);
 
@@ -28,44 +28,22 @@ int
 sys_fork(struct trapframe *tf, pid_t *ret_pid)
 {
     struct trapframae *child_tf = kmalloc(sizeof(struct trapframe));
-    if(child_tf == NULL) {:
+    if(child_tf == NULL) {
         return ENOMEM;
     }
     memmove(child_tf, tf, sizeof(struct trapframe));
 
-    struct proc *child_proc = proc_create("child");
-    if(proc->pid == -1) {
-        return ENPROC;
+    int err = 0;
+    struct proc *child_proc = proc_fork("child",&err);
+    if(err) {
+        return err;
     }
-
-    /* copy file table */
-    int i;
-    for(i = 0; i < OPEN_MAX; i++) {
-        if(curproc->file_table[i] != NULL) {
-            curproc->file_table[i]->ref_count++;
-        }
-        child_proc->file_table[i] = curproc->file_table[i];
-    }
-
-    int err;
-
-    /* set address_space */
-    if(currproc->p_addrspace != NULL) {
-         struct addrspace *child_as;
-         err = as_copy(curproc->p_addrspace, &child_as);
-         if(err) {
-             return err;
-         }
-         child_proc->p_addrspace = child_as;
-         as_activate(child_proc->p_addrspace);
-    }
-
     err = thread_fork("child", child_proc, childproc_init, child_tf, 0);
     if(err) {
          return err;
     }
 
-    *ret_pid = child_proc->p_pid;
+    *ret_pid = child_proc->pid;
     return 0;
 }
 
@@ -79,7 +57,7 @@ childproc_init(void *tf, unsigned long junk)
     child_tf.tf_v0 = 0;
     child_tf.tf_a3 = 0;
     child_tf.tf_epc += 4;
-    mips_usermode(&tf);
+    mips_usermode(&child_tf);
 }
 
 pid_t
