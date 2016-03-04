@@ -284,6 +284,8 @@ cmd_quit(int nargs, char **args)
 	sys_reboot(RB_POWEROFF);
     lock_destroy(menulock);
     cv_destroy(menucv);
+    menulock = NULL;
+    menucv = NULL;
 	thread_exit();
 	return 0;
 }

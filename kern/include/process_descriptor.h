@@ -5,6 +5,9 @@
 #include <types.h>
 #include <synch.h>
 
+extern struct lock *proc_lock;
+extern struct process_descriptor *process_table[PID_MAX];
+
 struct process_descriptor {
     bool running;
     pid_t ppid;
