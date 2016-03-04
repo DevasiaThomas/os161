@@ -77,7 +77,7 @@
 #define __PID_MIN       2
 
 /* Max value for a process ID (change this to match your implementation) */
-#define __PID_MAX       1024
+#define __PID_MAX       16383
 
 /* Max open files per process */
 #define __OPEN_MAX      128

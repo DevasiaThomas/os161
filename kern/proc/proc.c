@@ -99,12 +99,6 @@ proc_create(const char *name)
          return proc;
     }
 
-    if(proc_lock == NULL) {
-         proc_lock = lock_create("proc_lock");
-         if(proc_lock == NULL) {
-             return NULL;
-         }
-    }
 
     for(i = 0; i < PID_MAX; i++ ) {
         lock_acquire(proc_lock);
@@ -117,7 +111,7 @@ proc_create(const char *name)
                 lock_release(proc_lock);
                 return NULL;
             }
-
+            /*
             pdesc->wait_cv = cv_create(proc->p_name);
             if(pdesc->wait_cv == NULL) {
                 spinlock_cleanup(&proc->p_lock);
@@ -126,12 +120,20 @@ proc_create(const char *name)
                 kfree(proc);
                 lock_release(proc_lock);
             }
-
             pdesc->wait_lock = lock_create(proc->p_name);
             if(pdesc->wait_lock == NULL) {
                 spinlock_cleanup(&proc->p_lock);
                 kfree(proc->p_name);
                 kfree(pdesc->wait_cv);
+                kfree(pdesc);
+                kfree(proc);
+                lock_release(proc_lock);
+            } */
+
+            pdesc->wait_sem = sem_create(proc->p_name,0);
+            if(pdesc->wait_sem == NULL) {
+                spinlock_cleanup(&proc->p_lock);
+                kfree(proc->p_name);
                 kfree(pdesc);
                 kfree(proc);
                 lock_release(proc_lock);
@@ -253,16 +255,33 @@ proc_bootstrap(void)
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+
+    if(proc_lock == NULL) {
+         proc_lock = lock_create("proc_lock");
+         if(proc_lock == NULL) {
+            panic("proc_lock failed\n");
+         }
+    }
+
+    int i;
+    for(i = 0; i < PID_MAX; i++) {
+        process_table[i] = NULL;
+    }
 }
 
 struct proc *
 proc_fork(const char *name, int *err)
 {
     struct proc *child_proc = proc_create(name);
+    if(child_proc == NULL) {
+         *err = ENOMEM;
+         return NULL;
+    }
     if(child_proc->pid == -1) {
         kfree(child_proc->p_name);
         kfree(child_proc);
         *err = ENPROC;
+        return NULL;
     }
 
     /* copy file table */

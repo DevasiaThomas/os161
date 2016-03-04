@@ -12,8 +12,8 @@ struct process_descriptor {
     bool running;
     pid_t ppid;
     int exit_status;
-    struct cv *wait_cv;
-    struct lock *wait_lock;
+    struct semaphore *wait_sem;
+    //struct lock *wait_lock;
 };
 
 void destroy_pdesc(struct process_descriptor);
