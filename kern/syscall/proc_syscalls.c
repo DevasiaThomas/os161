@@ -25,7 +25,7 @@ void childproc_init(void *tf, unsigned long junk);
 int
 sys_fork(struct trapframe *tf, pid_t *ret_pid)
 {
-    struct trapframae *child_tf = kmalloc(sizeof(struct trapframe));
+    struct trapframe *child_tf = kmalloc(sizeof(struct trapframe));
     if(child_tf == NULL) {
         return ENOMEM;
     }

@@ -74,7 +74,7 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_open(userptr_t filename, int flags, int mode, int *fd);
 
 /* @SAM will write this definition */
-int sys_read(void);
+int sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read);
 
 /* write system call: write the buffer content to file
  *

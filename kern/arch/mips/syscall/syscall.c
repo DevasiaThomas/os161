@@ -119,10 +119,13 @@ syscall(struct trapframe *tf)
         /* to be written by Sam */
         break;
 
-        case SYS_read:
-        /* to be written by Sam */
-        break;
-
+        case SYS_read:/*sam 03/04*/
+	{
+            size_t nbytes_read;
+            err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, (size_t)tf->tf_a2, &nbytes_read);
+            retval = (int32_t)nbytes_read;
+            break;
+	}
         case SYS_write:
         {
             size_t nbytes_written;
