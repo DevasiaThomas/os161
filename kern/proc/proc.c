@@ -270,8 +270,8 @@ proc_bootstrap(void)
 
     num_processes = 0;
     ptable_top = PID_MIN;
-    for(i = 0; i < PID_MAX; i++) {
     int i;
+    for(i = 0; i < PID_MAX; i++) {
         process_table[i] = NULL;
     }
 }
