@@ -49,6 +49,7 @@
 #include <addrspace.h>
 #include <synch.h>
 #include <vnode.h>
+#include <vfs.h>
 #include <limits.h>
 #include <file_descriptor.h>
 #include <process_descriptor.h>
@@ -185,6 +186,14 @@ proc_destroy(struct proc *proc)
 	 */
 
 	/* VFS fields */
+	unsigned i;
+    for(i = 0;i < OPEN_MAX; i++ ) {
+		if(proc->file_table[i] != NULL){
+			vfs_close(proc->file_table[i]->vn);
+			kfree(proc->file_table[i]);
+			proc->file_table[i] = NULL;
+		}
+    }
 	if (proc->p_cwd) {
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
@@ -245,6 +254,14 @@ proc_destroy(struct proc *proc)
 	kfree(proc);
 }
 
+//destroy the pdesc created in proc_fork-> Sam03/05
+void destroy_pdesc(struct process_descriptor *pdesc){
+	sem_destroy(pdesc->wait_sem);
+	proc_destroy(curproc);
+	curproc = NULL; // Please remove it if you feel this is un necessary
+	kfree(pdesc);
+}
+
 /*
  * Create the process structure for the kernel.
  */
@@ -262,7 +279,7 @@ proc_bootstrap(void)
             panic("proc_lock failed\n");
          }
     }
-
+	
     int i;
     for(i = 0; i < PID_MAX; i++) {
         process_table[i] = NULL;
