@@ -106,19 +106,21 @@ sys_close(int fd)
     }
 	struct file_descriptor *fdesc = curproc->file_table[fd];
 	if(fdesc != NULL){
-		lock_acquire(fdesc->fdlock);
-
-		fdesc->ref_count -= 1;
-		if(fdesc->ref_count == 0){ // If no more references. 
-			vfs_close(fdesc->vn);
-			lock_release(fdesc->fdlock);
-			fd_destroy(fdesc);
-			fdesc = NULL; // I think we are better off passing a double pointer and making it NULL within the function.. but u say.
-			return 0;
-		}
-		lock_release(fdesc->fdlock);
+        lock_acquire(fdesc->fdlock);
+	    fdesc->ref_count -= 1;
+        /* Miraj 03/06: set file_table entry to NULL even if the ref count is not 0 */
+        curproc->file_table[fd] = NULL;
+	    if(fdesc->ref_count == 0){ // If no more references.
+	        vfs_close(fdesc->vn);
+	        lock_release(fdesc->fdlock);
+	        fd_destroy(fdesc);
+	        return 0;
+	    }
+        lock_release(fdesc->fdlock);
 	}
-		
+    else {
+        return EBADF;
+    }
     return 0;
 }
 
@@ -138,20 +140,20 @@ sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
     if (fd < 0 || fd >= OPEN_MAX) {
         return EBADF;
     }
-	
+
 	struct file_descriptor *fdesc = curproc->file_table[fd];
     if (fdesc == NULL)
     {
         return EBADF;
     }
-	
+
 	lock_acquire(fdesc->fdlock);
     if (!((fdesc->flags & O_RDONLY) == O_RDONLY || (fdesc->flags & O_RDWR) == O_RDWR))
     {
         lock_release(fdesc->fdlock);
         return EBADF;
     }
-	
+
 	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_READ);
 
 	int result = VOP_READ(fdesc->vn, &u_io);
@@ -191,7 +193,7 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
     }
 
 	lock_acquire(fdesc->fdlock);
-	
+
 	err = copyin(buf,kbuf,nbytes);
 	if(err){
 		lock_release(fdesc->fdlock);
@@ -210,9 +212,9 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
         lock_release(fdesc->fdlock);
         return EBADF;
     }
-	
+
 	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_WRITE);
-	
+
 	/* Sam 03/04
     iov.iov_ubase = (userptr_t)kbuf;
     iov.iov_len = nbytes;
@@ -224,7 +226,7 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
     u_io.uio_rw = UIO_WRITE;
 	u_io.uio_space = curproc->p_addrspace;
 	*/
-	
+
 
     int result = VOP_WRITE(fdesc->vn, &u_io);
     if (result) {

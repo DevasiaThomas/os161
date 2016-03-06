@@ -59,6 +59,8 @@
 struct proc *kproc;
 struct lock *proc_lock;
 struct process_descriptor *process_table[PID_MAX];
+int num_processes;
+int ptable_top;
 
 /*
  * Create a proc structure.
@@ -99,8 +101,7 @@ proc_create(const char *name)
          return proc;
     }
 
-
-    for(i = 0; i < PID_MAX; i++ ) {
+    for(i = ptable_top; i <= PID_MAX; i++ ) {
         lock_acquire(proc_lock);
         if(process_table[i] == NULL) {
             struct process_descriptor *pdesc = kmalloc(sizeof(struct process_descriptor));
@@ -111,24 +112,6 @@ proc_create(const char *name)
                 lock_release(proc_lock);
                 return NULL;
             }
-            /*
-            pdesc->wait_cv = cv_create(proc->p_name);
-            if(pdesc->wait_cv == NULL) {
-                spinlock_cleanup(&proc->p_lock);
-                kfree(proc->p_name);
-                kfree(pdesc);
-                kfree(proc);
-                lock_release(proc_lock);
-            }
-            pdesc->wait_lock = lock_create(proc->p_name);
-            if(pdesc->wait_lock == NULL) {
-                spinlock_cleanup(&proc->p_lock);
-                kfree(proc->p_name);
-                kfree(pdesc->wait_cv);
-                kfree(pdesc);
-                kfree(proc);
-                lock_release(proc_lock);
-            } */
 
             pdesc->wait_sem = sem_create(proc->p_name,0);
             if(pdesc->wait_sem == NULL) {
@@ -149,10 +132,14 @@ proc_create(const char *name)
             }
             proc->pid = i;
             process_table[i] = pdesc;
+            num_processes++;
             lock_release(proc_lock);
             break;
         }
         lock_release(proc_lock);
+        if(i == PID_MAX) {
+            i = PID_MIN;
+        }
     }
 
 	return proc;
@@ -263,6 +250,8 @@ proc_bootstrap(void)
          }
     }
 
+    num_processes = 0;
+    ptable_top = PID_MIN;
     int i;
     for(i = 0; i < PID_MAX; i++) {
         process_table[i] = NULL;
@@ -277,7 +266,7 @@ proc_fork(const char *name, int *err)
          *err = ENOMEM;
          return NULL;
     }
-    if(child_proc->pid == -1) {
+    if(num_processes > PROC_MAX) {
         kfree(child_proc->p_name);
         kfree(child_proc);
         *err = ENPROC;
