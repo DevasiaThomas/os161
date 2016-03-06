@@ -117,7 +117,10 @@ syscall(struct trapframe *tf)
 
         case SYS_close:
         /* to be written by Sam */
-        break;
+        {
+            err = sys_close(tf->tf_a0);
+            break;
+        }
 
         case SYS_read:/*sam 03/04*/
 	{

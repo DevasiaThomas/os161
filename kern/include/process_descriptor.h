@@ -7,6 +7,8 @@
 
 extern struct lock *proc_lock;
 extern struct process_descriptor *process_table[PID_MAX];
+extern int num_processes;
+extern int ptable_top;
 
 struct process_descriptor {
     bool running;
