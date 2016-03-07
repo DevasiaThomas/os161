@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <types.h>
 #include <synch.h>
+#include <proc.h>
 
 extern struct lock *proc_lock;
 extern struct process_descriptor *process_table[PID_MAX];
@@ -19,5 +20,6 @@ struct process_descriptor {
     //struct lock *wait_lock;
 };
 
-void destroy_pdesc(struct process_descriptor *pdesc);
 #endif
+void destroy_pdesc(struct process_descriptor *pdesc);
+

@@ -33,6 +33,7 @@
 #include <lib.h>
 #include <mips/trapframe.h>
 #include <thread.h>
+#include <proc.h>
 #include <current.h>
 #include <syscall.h>
 #include <file_descriptor.h>
@@ -99,7 +100,7 @@ syscall(struct trapframe *tf)
 	 */
 
 	retval = 0;
-
+    err = 0;
 	switch (callno) {
 	    case SYS_reboot:
 	    err = sys_reboot(tf->tf_a0);
@@ -180,7 +181,7 @@ syscall(struct trapframe *tf)
             retval = (int32_t)child_pid;
             break;
         }
-		
+
 		case SYS__exit:
         {
             sys_exit(tf->tf_a0);
@@ -189,8 +190,7 @@ syscall(struct trapframe *tf)
 
         case SYS_getpid:
         {
-            pid_t curpid = sys_getpid();
-            retval = (int32_t)curpid;
+            retval = (int32_t)curproc->pid;
             break;
         }
 
