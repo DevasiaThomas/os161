@@ -100,7 +100,8 @@ proc_create(const char *name)
     proc->p_cwd = NULL;
 
     if(strcmp(name,"[kernel]") == 0) {
-         return proc;
+	proc->pid = 0;
+	return proc;
     }
 
     for(i = ptable_top; i <= PID_MAX; i++ ) {

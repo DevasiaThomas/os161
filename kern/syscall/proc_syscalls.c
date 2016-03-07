@@ -67,7 +67,7 @@ return curproc->pid;
 void sys_exit(int exitcode){//sam 03/05
 	int i = curproc->pid;
 	struct process_descriptor *pdesc = process_table[i];
-	if((pdesc->ppid == -1)||(process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))){//orphan process
+	if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
 		proc_destroy(pdesc->proc);
 		destroy_pdesc(pdesc);
 		pdesc = process_table[i] = NULL;
@@ -105,7 +105,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 		if(!(((unsigned long)status & (sizeof(int)-1)) == 0)){ // to check if status pointer is alligned
 			return EFAULT;
 		}
-		int err=copyout((const void *)&pdesc->exit_status,status,sizeof(int)); // I am not sure how to put a value into a userptr directly
+		int err=copyout(&pdesc->exit_status,status,sizeof(int)); // I am not sure how to put a value into a userptr directly
 		if(err){
 			return err;
 		}
