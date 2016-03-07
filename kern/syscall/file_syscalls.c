@@ -49,7 +49,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
     }
     else
     {
-        struct vnode * f_vnode;
+        struct vnode *f_vnode;
         int err = vfs_open(buf, flags, mode, &f_vnode);
         if (err){
             return err;
@@ -96,27 +96,42 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
     }
 }
 
-/* @SAM: write this, add the arguments as well */
+/*Sam 03/04 */
 
 int
 sys_close(int fd)
 {
-    (void)fd;
+    if (fd < 0 || fd >= OPEN_MAX) {
+        return EBADF;
+    }
+	struct file_descriptor *fdesc = curproc->file_table[fd];
+	if(fdesc != NULL){
+        lock_acquire(fdesc->fdlock);
+	    fdesc->ref_count--;
+        /* Miraj 03/06: set file_table entry to NULL even if the ref count is not 0 */
+        curproc->file_table[fd] = NULL;
+	    if(fdesc->ref_count == 0){ // If no more references.
+	        vfs_close(fdesc->vn);
+	        lock_release(fdesc->fdlock);
+	        fd_destroy(fdesc);
+	        return 0;
+	    }
+        lock_release(fdesc->fdlock);
+	}
+    else {
+        return EBADF;
+    }
     return 0;
 }
 
-/* This as well*/
+/* Sam 03/04*/
 int
-sys_read(void)
-{
-    return 0;
-}
-
-int
-sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
+sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
 {
     struct iovec iov;
     struct uio u_io;
+	char kbuf[nbytes];
+	int err;
 
     if (buf == NULL) {
         return EFAULT;
@@ -126,20 +141,82 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
         return EBADF;
     }
 
-    struct file_descriptor *fdesc = curproc->file_table[fd];
+	struct file_descriptor *fdesc = curproc->file_table[fd];
     if (fdesc == NULL)
     {
         return EBADF;
     }
 
-    lock_acquire(fdesc->fdlock);
+	lock_acquire(fdesc->fdlock);
+    if (!((fdesc->flags & O_RDONLY) == O_RDONLY || (fdesc->flags & O_RDWR) == O_RDWR))
+    {
+        lock_release(fdesc->fdlock);
+        return EBADF;
+    }
+
+	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_READ);
+
+	int result = VOP_READ(fdesc->vn, &u_io);
+	if (result) {
+        lock_release(fdesc->fdlock);
+        return result;
+    }
+	err=copyout(kbuf,buf,nbytes);
+	if(err){
+		lock_release(fdesc->fdlock);
+		return err;
+	}
+    *nbytes_read = nbytes - u_io.uio_resid;
+    fdesc->offset += (*nbytes_read);
+    lock_release(fdesc->fdlock);
+    return 0;
+}
+
+int
+sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
+{
+    struct iovec iov;
+    struct uio u_io;
+	char kbuf[nbytes];
+	int err;
+
+	if (fd < 0 || fd >= OPEN_MAX) {
+        return EBADF;
+    }
+
+
+	struct file_descriptor *fdesc = curproc->file_table[fd];
+
+	if (fdesc == NULL)
+    {
+        return EBADF;
+    }
+
+	lock_acquire(fdesc->fdlock);
+
+	err = copyin(buf,kbuf,nbytes);
+	if(err){
+		lock_release(fdesc->fdlock);
+		return err;
+	}
+
+    /*
+	if (buf == NULL) {
+        return EFAULT;
+    }
+	*/
+
+
     if (!((fdesc->flags & O_WRONLY) == O_WRONLY || (fdesc->flags & O_RDWR) == O_RDWR))
     {
         lock_release(fdesc->fdlock);
         return EBADF;
     }
 
-    iov.iov_ubase = (userptr_t)buf;
+	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_WRITE);
+
+	/* Sam 03/04
+    iov.iov_ubase = (userptr_t)kbuf;
     iov.iov_len = nbytes;
     u_io.uio_iov = &iov;
     u_io.uio_iovcnt = 1;
@@ -147,7 +224,9 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
     u_io.uio_offset = fdesc->offset;
     u_io.uio_segflg = UIO_USERSPACE;
     u_io.uio_rw = UIO_WRITE;
-    u_io.uio_space = curproc->p_addrspace;
+	u_io.uio_space = curproc->p_addrspace;
+	*/
+
 
     int result = VOP_WRITE(fdesc->vn, &u_io);
     if (result) {
@@ -244,7 +323,7 @@ int sys___getcwd(userptr_t buf, size_t buflen, size_t *buflen_written)
     return 0;
 }
 
-// call this function approprietly in sys_close
+// call this function appropriately in sys_close
 void
 fd_destroy(struct file_descriptor *fdesc)
 {

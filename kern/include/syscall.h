@@ -74,7 +74,7 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 int sys_open(userptr_t filename, int flags, int mode, int *fd);
 
 /* @SAM will write this definition */
-int sys_read(void);
+int sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read);
 
 /* write system call: write the buffer content to file
  *
@@ -128,5 +128,7 @@ int sys___getcwd(userptr_t buf, size_t buflen, size_t *buflen_written);
 /* Process System calls */
 int sys_fork(struct trapframe *tf, pid_t *ret_pid);
 int sys_getpid(void);
+void sys_exit(int exitcode);
+int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid);
 
 #endif /* _SYSCALL_H_ */

@@ -49,7 +49,9 @@
 #include <addrspace.h>
 #include <synch.h>
 #include <vnode.h>
+#include <vfs.h>
 #include <limits.h>
+#include <kern/wait.h>
 #include <file_descriptor.h>
 #include <process_descriptor.h>
 
@@ -59,6 +61,8 @@
 struct proc *kproc;
 struct lock *proc_lock;
 struct process_descriptor *process_table[PID_MAX];
+int num_processes;
+int ptable_top;
 
 /*
  * Create a proc structure.
@@ -99,14 +103,7 @@ proc_create(const char *name)
          return proc;
     }
 
-    if(proc_lock == NULL) {
-         proc_lock = lock_create("proc_lock");
-         if(proc_lock == NULL) {
-             return NULL;
-         }
-    }
-
-    for(i = 0; i < PID_MAX; i++ ) {
+    for(i = ptable_top; i <= PID_MAX; i++ ) {
         lock_acquire(proc_lock);
         if(process_table[i] == NULL) {
             struct process_descriptor *pdesc = kmalloc(sizeof(struct process_descriptor));
@@ -118,23 +115,14 @@ proc_create(const char *name)
                 return NULL;
             }
 
-            pdesc->wait_cv = cv_create(proc->p_name);
-            if(pdesc->wait_cv == NULL) {
+            pdesc->wait_sem = sem_create(proc->p_name,0);
+            if(pdesc->wait_sem == NULL) {
                 spinlock_cleanup(&proc->p_lock);
                 kfree(proc->p_name);
                 kfree(pdesc);
                 kfree(proc);
                 lock_release(proc_lock);
-            }
-
-            pdesc->wait_lock = lock_create(proc->p_name);
-            if(pdesc->wait_lock == NULL) {
-                spinlock_cleanup(&proc->p_lock);
-                kfree(proc->p_name);
-                kfree(pdesc->wait_cv);
-                kfree(pdesc);
-                kfree(proc);
-                lock_release(proc_lock);
+                return NULL;
             }
 
             pdesc->running = true;
@@ -146,11 +134,17 @@ proc_create(const char *name)
                 pdesc->ppid = curproc->pid;
             }
             proc->pid = i;
+			pdesc->proc = proc;
             process_table[i] = pdesc;
+            num_processes++;
+            ptable_top = i;
             lock_release(proc_lock);
             break;
         }
         lock_release(proc_lock);
+        if(i == PID_MAX) {
+            i = PID_MIN;
+        }
     }
 
 	return proc;
@@ -175,6 +169,9 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
+	
+	
+	proc_remthread(curthread);// to let the proc be destroyed while exiting before thread_exit().
 
 	/*
 	 * We don't take p_lock in here because we must have the only
@@ -183,6 +180,22 @@ proc_destroy(struct proc *proc)
 	 */
 
 	/* VFS fields */
+	int i;
+    for(i = 0;i < OPEN_MAX; i++ ) {
+		if(proc->file_table[i] != NULL){
+			if(lock_do_i_hold(proc->file_table[i]->fdlock)){
+				lock_release(proc->file_table[i]->fdlock);
+			}
+			if(proc->file_table[i]->ref_count <= 1){ //if exit was called when reference count was just 1 implies this process held last refernce
+				vfs_close(proc->file_table[i]->vn);
+				fd_destroy(proc->file_table[i]);
+			}
+			else{
+				proc->file_table[i]->ref_count -=1;
+			}
+			proc->file_table[i] = NULL;
+		}
+    }
 	if (proc->p_cwd) {
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
@@ -243,6 +256,13 @@ proc_destroy(struct proc *proc)
 	kfree(proc);
 }
 
+//destroy the pdesc created in proc_fork-> Sam03/05
+void destroy_pdesc(struct process_descriptor *pdesc){
+	sem_destroy(pdesc->wait_sem);
+	pdesc->proc = NULL;
+	kfree(pdesc);
+}
+
 /*
  * Create the process structure for the kernel.
  */
@@ -253,16 +273,36 @@ proc_bootstrap(void)
 	if (kproc == NULL) {
 		panic("proc_create for kproc failed\n");
 	}
+
+    if(proc_lock == NULL) {
+         proc_lock = lock_create("proc_lock");
+         if(proc_lock == NULL) {
+            panic("proc_lock failed\n");
+         }
+    }
+
+
+    num_processes = 0;
+    ptable_top = PID_MIN;
+    int i;
+    for(i = 0; i < PID_MAX; i++) {
+        process_table[i] = NULL;
+    }
 }
 
 struct proc *
 proc_fork(const char *name, int *err)
 {
     struct proc *child_proc = proc_create(name);
-    if(child_proc->pid == -1) {
+    if(child_proc == NULL) {
+         *err = ENOMEM;
+         return NULL;
+    }
+    if(num_processes > PROC_MAX) {
         kfree(child_proc->p_name);
         kfree(child_proc);
         *err = ENPROC;
+        return NULL;
     }
 
     /* copy file table */
@@ -271,7 +311,7 @@ proc_fork(const char *name, int *err)
         if(curproc->file_table[i] != NULL) {
             curproc->file_table[i]->ref_count++;
         }
-        child_proc->file_table[i] = curproc->file_table[i];
+            child_proc->file_table[i] = curproc->file_table[i];
     }
 
     int errnum;

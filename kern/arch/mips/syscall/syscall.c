@@ -33,6 +33,7 @@
 #include <lib.h>
 #include <mips/trapframe.h>
 #include <thread.h>
+#include <proc.h>
 #include <current.h>
 #include <syscall.h>
 #include <file_descriptor.h>
@@ -99,7 +100,7 @@ syscall(struct trapframe *tf)
 	 */
 
 	retval = 0;
-
+    err = 0;
 	switch (callno) {
 	    case SYS_reboot:
 	    err = sys_reboot(tf->tf_a0);
@@ -117,12 +118,18 @@ syscall(struct trapframe *tf)
 
         case SYS_close:
         /* to be written by Sam */
-        break;
+        {
+            err = sys_close(tf->tf_a0);
+            break;
+        }
 
-        case SYS_read:
-        /* to be written by Sam */
-        break;
-
+        case SYS_read:/*sam 03/04*/
+	{
+            size_t nbytes_read;
+            err = sys_read(tf->tf_a0, (userptr_t)tf->tf_a1, (size_t)tf->tf_a2, &nbytes_read);
+            retval = (int32_t)nbytes_read;
+            break;
+	}
         case SYS_write:
         {
             size_t nbytes_written;
@@ -167,10 +174,23 @@ syscall(struct trapframe *tf)
             break;
         }
 
+		case SYS_waitpid:
+        {
+            pid_t child_pid;
+            err = sys_waitpid(tf->tf_a0,(userptr_t)tf->tf_a1,tf->tf_a2,&child_pid);
+            retval = (int32_t)child_pid;
+            break;
+        }
+
+		case SYS__exit:
+        {
+            sys_exit(tf->tf_a0);
+            break;
+        }
+
         case SYS_getpid:
         {
-            pid_t curpid = sys_getpid();
-            retval = (int32_t)curpid;
+            retval = (int32_t)curproc->pid;
             break;
         }
 

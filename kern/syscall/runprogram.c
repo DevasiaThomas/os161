@@ -142,7 +142,7 @@ runprogram(char *progname)
     }
     struct file_descriptor *fd_stderr = kmalloc(sizeof(struct file_descriptor));
     strcpy(fd_stdin->filename,"con_stderr");
-    fd_stderr->flags = O_RDONLY;
+    fd_stderr->flags = O_WRONLY;
     fd_stderr->ref_count = 1;
     fd_stderr->fdlock = lock_create("con_stderr");
     fd_stderr->offset = 0;
