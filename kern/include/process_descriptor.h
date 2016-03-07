@@ -20,6 +20,6 @@ struct process_descriptor {
     //struct lock *wait_lock;
 };
 
-#endif
 void destroy_pdesc(struct process_descriptor *pdesc);
 
+#endif

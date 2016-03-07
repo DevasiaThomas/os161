@@ -310,9 +310,8 @@ proc_fork(const char *name, int *err)
     for(i = 0; i < OPEN_MAX; i++) {
         if(curproc->file_table[i] != NULL) {
             curproc->file_table[i]->ref_count++;
-            child_proc->file_table[i] = curproc->file_table[i];
         }
-
+            child_proc->file_table[i] = curproc->file_table[i];
     }
 
     int errnum;
