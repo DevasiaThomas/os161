@@ -11,6 +11,7 @@ extern int num_processes;
 extern int ptable_top;
 
 struct process_descriptor {
+	struct proc *proc;
     bool running;
     pid_t ppid;
     int exit_status;
@@ -18,5 +19,5 @@ struct process_descriptor {
     //struct lock *wait_lock;
 };
 
-void destroy_pdesc(struct process_descriptor *pdesc);
+void destroy_pdesc(struct process_descriptor *pdesc, int orphan);
 #endif

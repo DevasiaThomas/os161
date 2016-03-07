@@ -67,8 +67,8 @@ return curproc->pid;
 void sys_exit(int exitcode){//sam 03/05
 	struct process_descriptor *pdesc = process_table[curproc->pid];
 	if((pdesc->ppid == -1)||(process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))){
-		destroy_pdesc(pdesc);
-		pdesc=NULL;
+		destroy_pdesc(pdesc,1);
+		pdesc = process_table[curproc->pid] = NULL;
 	}
 	else{
 		pdesc->running = false;
@@ -91,7 +91,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 	if(!(options == 0 || options == WNOHANG)){
 		return EINVAL;
 	}
-	while(pdesc->running){	
+	while(pdesc->running){	//wait for child to exit
 		if(options == WNOHANG){
 			*retpid = 0;
 			return 0;
@@ -108,8 +108,8 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 			}
 	}
 
-	destroy_pdesc(pdesc);
-	pdesc=NULL;
+	destroy_pdesc(pdesc,0);
+	pdesc = process_table[pid] = NULL;
 	return 0;
 }
 

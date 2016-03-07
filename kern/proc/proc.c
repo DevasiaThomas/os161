@@ -51,6 +51,7 @@
 #include <vnode.h>
 #include <vfs.h>
 #include <limits.h>
+#include <kern/wait.h>
 #include <file_descriptor.h>
 #include <process_descriptor.h>
 
@@ -131,6 +132,7 @@ proc_create(const char *name)
             else {
                 pdesc->ppid = curproc->pid;
             }
+			pdesc->proc = proc;
             proc->pid = i;
             process_table[i] = pdesc;
             num_processes++;
@@ -173,11 +175,11 @@ proc_destroy(struct proc *proc)
 	 */
 
 	/* VFS fields */
-	unsigned i;
+	int i;
     for(i = 0;i < OPEN_MAX; i++ ) {
 		if(proc->file_table[i] != NULL){
 			vfs_close(proc->file_table[i]->vn);
-			kfree(proc->file_table[i]);
+	        fd_destroy(proc->file_table[i]);
 			proc->file_table[i] = NULL;
 		}
     }
@@ -242,10 +244,13 @@ proc_destroy(struct proc *proc)
 }
 
 //destroy the pdesc created in proc_fork-> Sam03/05
-void destroy_pdesc(struct process_descriptor *pdesc){
+void destroy_pdesc(struct process_descriptor *pdesc, int orphan){
 	sem_destroy(pdesc->wait_sem);
-	proc_destroy(curproc);
-	curproc = NULL; // Please remove it if you feel this is un necessary
+	if(orphan){
+		proc_remthread(curthread);
+	}
+	proc_destroy(pdesc->proc);
+	pdesc->proc = NULL; // only in case of waitpid
 	kfree(pdesc);
 }
 
@@ -404,7 +409,7 @@ proc_remthread(struct thread *t)
 	KASSERT(proc->p_numthreads > 0);
 	proc->p_numthreads--;
 	spinlock_release(&proc->p_lock);
-
+	
 	spl = splhigh();
 	t->t_proc = NULL;
 	splx(spl);
