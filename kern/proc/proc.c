@@ -167,6 +167,9 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
+	
+	
+	proc_remthread(curthread);// to let the proc be destroyed while exiting before thread_exit().
 
 	/*
 	 * We don't take p_lock in here because we must have the only
@@ -178,8 +181,17 @@ proc_destroy(struct proc *proc)
 	int i;
     for(i = 0;i < OPEN_MAX; i++ ) {
 		if(proc->file_table[i] != NULL){
-			vfs_close(proc->file_table[i]->vn);
-	        fd_destroy(proc->file_table[i]);
+			if(lock_do_i_hold(proc->file_table[i]->fdlock)){
+				lock_release(proc->file_table[i]->fdlock);
+			}
+			if(proc->file_table[i]->ref_count <= 1){ //if exit was called when reference count was just 1 implies this process held last refernce
+				vfs_close(proc->file_table[i]->vn);
+				fd_destroy(proc->file_table[i]);
+			}
+			else{
+				proc->file_table[i]->ref_count -=1;
+			}
+	        kfree(proc->file_table[i]);
 			proc->file_table[i] = NULL;
 		}
     }
@@ -244,12 +256,8 @@ proc_destroy(struct proc *proc)
 }
 
 //destroy the pdesc created in proc_fork-> Sam03/05
-void destroy_pdesc(struct process_descriptor *pdesc, int orphan){
+void destroy_pdesc(struct process_descriptor *pdesc){
 	sem_destroy(pdesc->wait_sem);
-	if(orphan){
-		proc_remthread(curthread);
-	}
-	proc_destroy(pdesc->proc);
 	pdesc->proc = NULL; // only in case of waitpid
 	kfree(pdesc);
 }
