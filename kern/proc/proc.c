@@ -121,6 +121,7 @@ proc_create(const char *name)
                 kfree(pdesc);
                 kfree(proc);
                 lock_release(proc_lock);
+                return NULL;
             }
 
             pdesc->running = true;
@@ -134,6 +135,7 @@ proc_create(const char *name)
             proc->pid = i;
             process_table[i] = pdesc;
             num_processes++;
+            ptable_top = i;
             lock_release(proc_lock);
             break;
         }
@@ -176,8 +178,8 @@ proc_destroy(struct proc *proc)
 	unsigned i;
     for(i = 0;i < OPEN_MAX; i++ ) {
 		if(proc->file_table[i] != NULL){
-			vfs_close(proc->file_table[i]->vn);
-			kfree(proc->file_table[i]);
+			//vfs_close(proc->file_table[i]->vn);
+			//kfree(proc->file_table[i]);
 			proc->file_table[i] = NULL;
 		}
     }
@@ -244,8 +246,6 @@ proc_destroy(struct proc *proc)
 //destroy the pdesc created in proc_fork-> Sam03/05
 void destroy_pdesc(struct process_descriptor *pdesc){
 	sem_destroy(pdesc->wait_sem);
-	proc_destroy(curproc);
-	curproc = NULL; // Please remove it if you feel this is un necessary
 	kfree(pdesc);
 }
 
@@ -296,8 +296,9 @@ proc_fork(const char *name, int *err)
     for(i = 0; i < OPEN_MAX; i++) {
         if(curproc->file_table[i] != NULL) {
             curproc->file_table[i]->ref_count++;
+            child_proc->file_table[i] = curproc->file_table[i];
         }
-        child_proc->file_table[i] = curproc->file_table[i];
+
     }
 
     int errnum;

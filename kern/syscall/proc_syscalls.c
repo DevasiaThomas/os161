@@ -66,15 +66,19 @@ return curproc->pid;
 
 void sys_exit(int exitcode){//sam 03/05
 	struct process_descriptor *pdesc = process_table[curproc->pid];
-	if((pdesc->ppid == -1)||(process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))){
-		destroy_pdesc(pdesc);
-		pdesc=NULL;
+	struct proc *cur = curproc;
+
+    if((pdesc->ppid == -1)||(process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))) {
+	    destroy_pdesc(pdesc);
+	    pdesc=NULL;
 	}
 	else{
-		pdesc->running = false;
-		pdesc->exit_status = _MKWAIT_EXIT(exitcode);	
-		V(pdesc->wait_sem);
+	    pdesc->running = false;
+	    pdesc->exit_status = _MKWAIT_EXIT(exitcode);
+	    V(pdesc->wait_sem);
 	}
+    proc_remthread(curthread);
+    proc_destroy(cur);
 	thread_exit();
 }
 
@@ -91,7 +95,7 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 	if(!(options == 0 || options == WNOHANG)){
 		return EINVAL;
 	}
-	while(pdesc->running){	
+	while(pdesc->running){
 		if(options == WNOHANG){
 			*retpid = 0;
 			return 0;
@@ -102,10 +106,10 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 		if(!(((unsigned long)status & (sizeof(int)-1)) == 0)){ // to check if status pointer is alligned
 			return EFAULT;
 		}
-		int err=copyout((const void *)&pdesc->exit_status,status,sizeof(int)); // I am not sure how to put a value into a userptr directly
-			if(err){
-				return err;
-			}
+		int err=copyout(&pdesc->exit_status,status,sizeof(int)); // I am not sure how to put a value into a userptr directly
+		if(err){
+			return err;
+		}
 	}
 
 	destroy_pdesc(pdesc);

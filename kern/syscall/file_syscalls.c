@@ -49,7 +49,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
     }
     else
     {
-        struct vnode * f_vnode;
+        struct vnode *f_vnode;
         int err = vfs_open(buf, flags, mode, &f_vnode);
         if (err){
             return err;
@@ -107,7 +107,7 @@ sys_close(int fd)
 	struct file_descriptor *fdesc = curproc->file_table[fd];
 	if(fdesc != NULL){
         lock_acquire(fdesc->fdlock);
-	    fdesc->ref_count -= 1;
+	    fdesc->ref_count--;
         /* Miraj 03/06: set file_table entry to NULL even if the ref count is not 0 */
         curproc->file_table[fd] = NULL;
 	    if(fdesc->ref_count == 0){ // If no more references.
