@@ -789,10 +789,10 @@ thread_exit(void)
 	 * Detach from our process. You might need to move this action
 	 * around, depending on how your wait/exit works.
 	 */
-    if(curproc != NULL) {
+
+    if(cur->t_proc!=NULL){ // added the if condition to help orphan processes clean themselves. Sam 03/06
 	    proc_remthread(cur);
-    }
-//    proc_destroy(cur_proc);
+	}
 
 	/* Make sure we *are* detached (move this only if you're sure!) */
 	KASSERT(cur->t_proc == NULL);

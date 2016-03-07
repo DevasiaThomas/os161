@@ -51,6 +51,7 @@
 #include <vnode.h>
 #include <vfs.h>
 #include <limits.h>
+#include <kern/wait.h>
 #include <file_descriptor.h>
 #include <process_descriptor.h>
 
@@ -175,7 +176,7 @@ proc_destroy(struct proc *proc)
 	 */
 
 	/* VFS fields */
-	unsigned i;
+	int i;
     for(i = 0;i < OPEN_MAX; i++ ) {
 		if(proc->file_table[i] != NULL){
 			//vfs_close(proc->file_table[i]->vn);
