@@ -72,8 +72,6 @@
  * it gets by passing it to vfs_open().
  */
 
-struct lock *menulock;
-struct cv *menucv;
 
 static
 void
@@ -98,15 +96,9 @@ cmd_progthread(void *ptr, unsigned long nargs)
 	if (result) {
 		kprintf("Running program %s failed: %s\n", args[0],
 			strerror(result));
-        lock_acquire(menulock);
-        cv_signal(menucv,menulock);
-        lock_release(menulock);
 		return;
 	}
 
-    lock_acquire(menulock);
-    cv_signal(menucv,menulock);
-    lock_release(menulock);
 	/* NOTREACHED: runprogram only returns on error. */
 }
 
@@ -128,7 +120,6 @@ common_prog(int nargs, char **args)
 {
 	struct proc *proc;
 	int result;
-    bool p_exited = false;
 
 	/* Create a process for the new program to run in. */
 	proc = proc_create_runprogram(args[0] /* name */);
@@ -145,11 +136,10 @@ common_prog(int nargs, char **args)
 		proc_destroy(proc);
 		return result;
 	}
-    lock_acquire(menulock);
-    while(p_exited == false){
-        cv_wait(menucv,menulock);
-    }
-    lock_release(menulock);
+    int status;
+    pid_t pid;
+
+    result = sys_waitpid(proc->pid,(userptr_t)&status,0,&pid);
 	/*
 	 * The new process will be destroyed when the program exits...
 	 * once you write the code for handling that.
@@ -282,10 +272,6 @@ cmd_quit(int nargs, char **args)
 
 	vfs_sync();
 	sys_reboot(RB_POWEROFF);
-    lock_destroy(menulock);
-    cv_destroy(menucv);
-    menulock = NULL;
-    menucv = NULL;
 	thread_exit();
 	return 0;
 }
@@ -825,8 +811,6 @@ menu(char *args)
 {
 	char buf[64];
 
-    menulock = lock_create("menulock");
-    menucv = cv_create("menucv");
 	menu_execute(args, 1);
 
 	while (1) {

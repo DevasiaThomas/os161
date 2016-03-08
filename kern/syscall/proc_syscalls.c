@@ -68,7 +68,7 @@ void sys_exit(int exitcode){//sam 03/05
 	struct process_descriptor *pdesc = process_table[curproc->pid];
 	struct proc *cur = curproc;
 
-    if((pdesc->ppid == -1)||(process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))) {
+    if((pdesc->ppid == -1)||((pdesc->ppid != 0) && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))) {
 	    destroy_pdesc(pdesc);
 	    pdesc = NULL;
         process_table[curproc->pid] = NULL;

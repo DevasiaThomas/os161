@@ -100,6 +100,7 @@ proc_create(const char *name)
     proc->p_cwd = NULL;
 
     if(strcmp(name,"[kernel]") == 0) {
+        proc->pid = 0;
          return proc;
     }
 
@@ -178,12 +179,8 @@ proc_destroy(struct proc *proc)
 	/* VFS fields */
 	int i;
     for(i = 0;i < OPEN_MAX; i++ ) {
-		if(proc->file_table[i] != NULL){
-			//vfs_close(proc->file_table[i]->vn);
-			//kfree(proc->file_table[i]);
-			proc->file_table[i] = NULL;
-		}
-    }
+
+	}
 	if (proc->p_cwd) {
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
