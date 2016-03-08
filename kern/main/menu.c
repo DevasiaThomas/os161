@@ -143,7 +143,7 @@ common_prog(int nargs, char **args)
 	/*
 	 * The new process will be destroyed when the program exits...
 	 * once you write the code for handling that.
-	 */
+	*/
 
 	return 0;
 }

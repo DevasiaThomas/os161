@@ -38,7 +38,6 @@
 
 #include <spinlock.h>
 #include <file_descriptor.h>
-#include <process_descriptor.h>
 #include <limits.h>
 
 struct addrspace;

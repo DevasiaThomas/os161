@@ -65,22 +65,20 @@ return curproc->pid;
 }
 
 void sys_exit(int exitcode){//sam 03/05
-	struct process_descriptor *pdesc = process_table[curproc->pid];
-	struct proc *cur = curproc;
-
-    if((pdesc->ppid == -1)||((pdesc->ppid != 0) && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))) {
-	    destroy_pdesc(pdesc);
-	    pdesc = NULL;
-        process_table[curproc->pid] = NULL;
+	int i = curproc->pid;
+	struct process_descriptor *pdesc = process_table[i];
+	if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
+		proc_destroy(pdesc->proc);
+		destroy_pdesc(pdesc);
+		pdesc = process_table[i] = NULL;
 	}
 	else{
-	    pdesc->running = false;
-	    pdesc->exit_status = _MKWAIT_EXIT(exitcode);
-	    V(pdesc->wait_sem);
+		proc_destroy(pdesc->proc);
+		pdesc->running = false;
+		pdesc->exit_status = _MKWAIT_EXIT(exitcode);
+		V(pdesc->wait_sem);
 	}
-    proc_remthread(curthread);
-    proc_destroy(cur);
-	thread_exit();
+    thread_exit();
 }
 
 int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 03/06

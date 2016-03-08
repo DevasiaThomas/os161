@@ -135,6 +135,7 @@ proc_create(const char *name)
                 pdesc->ppid = curproc->pid;
             }
             proc->pid = i;
+			pdesc->proc = proc;
             process_table[i] = pdesc;
             num_processes++;
             ptable_top = i;
@@ -170,6 +171,9 @@ proc_destroy(struct proc *proc)
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
 
+
+	proc_remthread(curthread);// to let the proc be destroyed while exiting before thread_exit().
+
 	/*
 	 * We don't take p_lock in here because we must have the only
 	 * reference to this structure. (Otherwise it would be
@@ -179,8 +183,22 @@ proc_destroy(struct proc *proc)
 	/* VFS fields */
 	int i;
     for(i = 0;i < OPEN_MAX; i++ ) {
+		if(proc->file_table[i] != NULL){
+            lock_acquire(proc->file_table[i]->fdlock);
+            proc->file_table[i]->ref_count--;
+			if(proc->file_table[i]->ref_count == 0){ //if exit was called when reference count was just 1 implies this process held last refernce
+				vfs_close(proc->file_table[i]->vn);
+                lock_release(proc->file_table[i]->fdlock);
+				fd_destroy(proc->file_table[i]);
+                proc->file_table[i] = NULL;
+                continue;
+			}
+            lock_release(proc->file_table[i]->fdlock);
+			proc->file_table[i] = NULL;
 
-	}
+		}
+    }
+
 	if (proc->p_cwd) {
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
@@ -244,6 +262,7 @@ proc_destroy(struct proc *proc)
 //destroy the pdesc created in proc_fork-> Sam03/05
 void destroy_pdesc(struct process_descriptor *pdesc){
 	sem_destroy(pdesc->wait_sem);
+	pdesc->proc = NULL;
 	kfree(pdesc);
 }
 
@@ -294,9 +313,8 @@ proc_fork(const char *name, int *err)
     for(i = 0; i < OPEN_MAX; i++) {
         if(curproc->file_table[i] != NULL) {
             curproc->file_table[i]->ref_count++;
-            child_proc->file_table[i] = curproc->file_table[i];
         }
-
+            child_proc->file_table[i] = curproc->file_table[i];
     }
 
     int errnum;
