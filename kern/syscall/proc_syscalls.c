@@ -22,6 +22,8 @@
 
 #define MAX_ARG_NUM 3900
 
+char temp2[ARG_MAX];
+
 void childproc_init(void *tf, unsigned long junk);
 void free_buffers(char **buf, int size);
 
@@ -97,6 +99,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     int arg_len_left = ARG_MAX;
     int padding = 0;
     userptr_t args = u_args;
+    //char *temp2 = kmalloc(ARG_MAX);
 
     while(1) {
         char **temp = kmalloc(sizeof(char *));
@@ -117,16 +120,16 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             kfree(temp);
             break;
         }
-        char *temp2 = kmalloc(1024*sizeof(char));
-        err = copyin((const_userptr_t)*temp,temp2,(size_t)1024);
+        //char *temp2 = kmalloc(1024*sizeof(char));
+        err = copyinstr((const_userptr_t)*temp,temp2,ARG_MAX,&actual);
         if(err) {
             free_buffers(kbuf,i+1);
             kfree(progname);
             kfree(temp);
-            kfree(temp2);
+            //kfree(temp2);
              return err;
         }
-        kfree(temp2);
+        //kfree(temp2);
         kbuf[i] = (char *)kmalloc(strlen(*temp)+1);
         strcpy(kbuf[i],*temp);
         int arg_len = strlen(kbuf[i]) + 1;
@@ -149,6 +152,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         i++;
     }
 
+    //kfree(temp2);
     int argc = i;
     /* Run program */
 
