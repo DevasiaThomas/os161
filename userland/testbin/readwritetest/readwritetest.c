@@ -101,6 +101,6 @@ main(int argc, char **argv)
 
 	secprintf(SECRET, MAGIC, "/testbin/readwritetest");
 	// Exit may not be implemented. So crash.
-	crash_prog();
+	//crash_prog();
 	return 0;
 }

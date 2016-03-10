@@ -60,7 +60,7 @@
  */
 struct proc *kproc;
 struct lock *proc_lock;
-struct process_descriptor *process_table[PID_MAX];
+struct process_descriptor *process_table[PROC_MAX];
 int num_processes;
 int ptable_top;
 
@@ -288,7 +288,7 @@ proc_bootstrap(void)
     num_processes = 0;
     ptable_top = PID_MIN;
     int i;
-    for(i = 0; i < PID_MAX; i++) {
+    for(i = 0; i < PROC_MAX; i++) {
         process_table[i] = NULL;
     }
 }

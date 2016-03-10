@@ -49,6 +49,6 @@
 #define OPEN_MAX        __OPEN_MAX
 #define IOV_MAX         __IOV_MAX
 
-#define PROC_MAX        16383
+#define PROC_MAX       __MAX_PROC
 
 #endif /* _LIMITS_H_ */
