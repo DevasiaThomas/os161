@@ -75,5 +75,7 @@ main(int argc, char **argv)
 
 
 	success(TEST161_SUCCESS, SECRET, "/testbin/closetest");
+	// Exit may not be implemented. So crash.
+	crash_prog();
 	return 0;
 }

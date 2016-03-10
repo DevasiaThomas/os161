@@ -60,7 +60,7 @@
  */
 struct proc *kproc;
 struct lock *proc_lock;
-struct process_descriptor *process_table[PID_MAX];
+struct process_descriptor *process_table[PROC_MAX];
 int num_processes;
 int ptable_top;
 
@@ -100,8 +100,8 @@ proc_create(const char *name)
     proc->p_cwd = NULL;
 
     if(strcmp(name,"[kernel]") == 0) {
-	proc->pid = 0;
-	return proc;
+        proc->pid = 0;
+         return proc;
     }
 
     for(i = ptable_top; i <= PID_MAX; i++ ) {
@@ -170,8 +170,8 @@ proc_destroy(struct proc *proc)
 
 	KASSERT(proc != NULL);
 	KASSERT(proc != kproc);
-	
-	
+
+
 	proc_remthread(curthread);// to let the proc be destroyed while exiting before thread_exit().
 
 	/*
@@ -184,19 +184,21 @@ proc_destroy(struct proc *proc)
 	int i;
     for(i = 0;i < OPEN_MAX; i++ ) {
 		if(proc->file_table[i] != NULL){
-			if(lock_do_i_hold(proc->file_table[i]->fdlock)){
-				lock_release(proc->file_table[i]->fdlock);
-			}
-			if(proc->file_table[i]->ref_count <= 1){ //if exit was called when reference count was just 1 implies this process held last refernce
+            lock_acquire(proc->file_table[i]->fdlock);
+            proc->file_table[i]->ref_count--;
+			if(proc->file_table[i]->ref_count == 0){ //if exit was called when reference count was just 1 implies this process held last refernce
 				vfs_close(proc->file_table[i]->vn);
+                lock_release(proc->file_table[i]->fdlock);
 				fd_destroy(proc->file_table[i]);
+                proc->file_table[i] = NULL;
+                continue;
 			}
-			else{
-				proc->file_table[i]->ref_count -=1;
-			}
+            lock_release(proc->file_table[i]->fdlock);
 			proc->file_table[i] = NULL;
+
 		}
     }
+
 	if (proc->p_cwd) {
 		VOP_DECREF(proc->p_cwd);
 		proc->p_cwd = NULL;
@@ -286,7 +288,7 @@ proc_bootstrap(void)
     num_processes = 0;
     ptable_top = PID_MIN;
     int i;
-    for(i = 0; i < PID_MAX; i++) {
+    for(i = 0; i < PROC_MAX; i++) {
         process_table[i] = NULL;
     }
 }
@@ -314,6 +316,14 @@ proc_fork(const char *name, int *err)
         }
             child_proc->file_table[i] = curproc->file_table[i];
     }
+
+    spinlock_acquire(&curproc->p_lock);
+	if (curproc->p_cwd != NULL) {
+	    VOP_INCREF(curproc->p_cwd);
+	    child_proc->p_cwd = curproc->p_cwd;
+	}
+	spinlock_release(&curproc->p_lock);
+
 
     int errnum;
     /* set address_space */

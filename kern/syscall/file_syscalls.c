@@ -26,10 +26,11 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
         return EFAULT;
     }
 
-    char buf[NAME_MAX];
+    char *buf = kmalloc(NAME_MAX*sizeof(char));
     size_t actual_length;
     int err = copyinstr(filename, buf, NAME_MAX, &actual_length);
     if(err != 0) {
+        kfree(buf);
         return err;
     }
 
@@ -37,14 +38,17 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
 
     if (open_flags & O_RDONLY && open_flags & O_WRONLY)
     {
+        kfree(buf);
         return EINVAL;
     }
     else if(open_flags & O_RDONLY && open_flags & O_RDWR)
     {
+        kfree(buf);
         return EINVAL;
     }
     else if(open_flags & O_WRONLY && open_flags & O_RDWR)
     {
+        kfree(buf);
         return EINVAL;
     }
     else
@@ -52,6 +56,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
         struct vnode *f_vnode;
         int err = vfs_open(buf, flags, mode, &f_vnode);
         if (err){
+            kfree(buf);
             return err;
         }
         else{
@@ -62,6 +67,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 struct stat f_stat;
                 int err = VOP_STAT(f_vnode, &f_stat);
                 if (err) {
+                    kfree(buf);
                     return err;
                 }
                 offset = f_stat.st_size;
@@ -71,17 +77,20 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 i++;
             }
             if (i>=OPEN_MAX) {
+                kfree(buf);
                 return EMFILE;
             }
             else {
                 struct file_descriptor *fdesc = kmalloc(sizeof(struct file_descriptor));
                 if (fdesc == NULL) {
+                    kfree(buf);
                     return ENOMEM;
                 }
-                strcpy(fdesc->filename,(char *)filename);
-                fdesc->fdlock = lock_create(fdesc->filename);
+                ///strcpy(fdesc->filename,(char *)filename);
+                fdesc->fdlock = lock_create(buf);
                 if (fdesc->fdlock == NULL) {
                     kfree(fdesc);
+                    kfree(buf);
                     return ENOMEM;
                 }
                 fdesc->offset = offset;
@@ -90,6 +99,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 fdesc->flags = flags;
                 curproc->file_table[i] = fdesc;
                 *fd = i;
+                kfree(buf);
                 return 0;
             }
         }
@@ -153,6 +163,10 @@ sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
         lock_release(fdesc->fdlock);
         return EBADF;
     }
+    if((fdesc->flags & O_WRONLY) == O_WRONLY) {
+        lock_release(fdesc->fdlock);
+        return EBADF;
+    }
 
 	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_READ);
 
@@ -212,6 +226,10 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
         lock_release(fdesc->fdlock);
         return EBADF;
     }
+    /*if((fdesc->flags & O_RDONLY) == O_RDONLY) {
+         lock_release(fdesc->fdlock);
+         return EBADF;
+    }*/
 
 	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_WRITE);
 
@@ -254,7 +272,7 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 int
 sys_dup2(int oldfd, int newfd, int *retfd)
 {
-    if(oldfd < 0 || oldfd > OPEN_MAX || newfd < 0 || newfd > OPEN_MAX) {
+    if(oldfd < 0 || oldfd >= OPEN_MAX || newfd < 0 || newfd >= OPEN_MAX) {
         return EBADF;
     }
 
@@ -306,7 +324,11 @@ int sys___getcwd(userptr_t buf, size_t buflen, size_t *buflen_written)
 {
     struct uio u_io;
     struct iovec iov;
-    iov.iov_ubase = buf;
+    char kbuf[PATH_MAX];
+
+    uio_kinit(&iov,&u_io,kbuf,buflen,0,UIO_READ);
+
+    /*iov.iov_ubase = buf;
     iov.iov_len = buflen;
     u_io.uio_iov = &iov;
     u_io.uio_iovcnt = 1;
@@ -314,12 +336,13 @@ int sys___getcwd(userptr_t buf, size_t buflen, size_t *buflen_written)
     u_io.uio_offset = 0;
     u_io.uio_segflg = UIO_USERSPACE;
     u_io.uio_rw = UIO_READ;
-    u_io.uio_space = curproc->p_addrspace;
+    u_io.uio_space = curproc->p_addrspace;*/
     int err = vfs_getcwd(&u_io);
     if(err != 0) {
         return err;
     }
     *buflen_written = buflen - u_io.uio_resid;
+    err = copyout(kbuf,buf,*buflen_written);
     return 0;
 }
 

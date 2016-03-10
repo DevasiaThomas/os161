@@ -72,6 +72,7 @@ main(int argc, char *argv[])
 	if (fd < 0) {
 		err(1, "%s: create", filename);
 	}
+    tprintf("file created successfully: %s\n",filename);
 
 	if (lseek(fd, size-1, SEEK_SET) == -1) {
 		err(1, "%s: lseek", filename);

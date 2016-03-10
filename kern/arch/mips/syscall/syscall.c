@@ -174,6 +174,12 @@ syscall(struct trapframe *tf)
             break;
         }
 
+        case SYS_execv:
+        {
+            err = sys_execv((userptr_t)tf->tf_a0, (userptr_t)tf->tf_a1);
+            break;
+        }
+
 		case SYS_waitpid:
         {
             pid_t child_pid;

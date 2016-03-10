@@ -5,7 +5,7 @@
 #include <types.h>
 
 struct file_descriptor {
-    char filename[NAME_MAX];
+   // char filename[NAME_MAX];
     int flags;
     off_t offset;
     int ref_count;

@@ -111,7 +111,7 @@ runprogram(char *progname)
          return result;
     }
     struct file_descriptor *fd_stdin = kmalloc(sizeof(struct file_descriptor));
-    strcpy(fd_stdin->filename,"con_stdin");
+    //strcpy(fd_stdin->filename,"con_stdin");
     fd_stdin->flags = O_RDONLY;
     fd_stdin->ref_count = 1;
     fd_stdin->fdlock = lock_create("con_stdin");
@@ -126,7 +126,7 @@ runprogram(char *progname)
          return result;
     }
     struct file_descriptor *fd_stdout = kmalloc(sizeof(struct file_descriptor));
-    strcpy(fd_stdin->filename,"con_stdout");
+    //strcpy(fd_stdin->filename,"con_stdout");
     fd_stdout->flags = O_WRONLY;
     fd_stdout->ref_count = 1;
     fd_stdout->fdlock = lock_create("con_stdout");
@@ -141,7 +141,7 @@ runprogram(char *progname)
          return result;
     }
     struct file_descriptor *fd_stderr = kmalloc(sizeof(struct file_descriptor));
-    strcpy(fd_stdin->filename,"con_stderr");
+    //strcpy(fd_stdin->filename,"con_stderr");
     fd_stderr->flags = O_WRONLY;
     fd_stderr->ref_count = 1;
     fd_stderr->fdlock = lock_create("con_stderr");
