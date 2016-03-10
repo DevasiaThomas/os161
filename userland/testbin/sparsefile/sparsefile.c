@@ -110,7 +110,5 @@ main(int argc, char *argv[])
 
 	nprintf("\n");
 	success(TEST161_SUCCESS, SECRET, "/testbin/sparsefile");
-	// Exit may not be implemented. So crash.
-	crash_prog();
 	return 0;
 }

@@ -107,10 +107,26 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             return ENOMEM;
         }
         err = copyin(u_args, temp, sizeof(char *));
+        if(err) {
+            free_buffers(kbuf,i+1);
+            kfree(progname);
+            kfree(temp);
+            return err;
+        }
         if(temp[0] == NULL) {
             kfree(temp);
             break;
         }
+        char *temp2 = kmalloc(1024*sizeof(char));
+        err = copyin((const_userptr_t)*temp,temp2,(size_t)1024);
+        if(err) {
+            free_buffers(kbuf,i+1);
+            kfree(progname);
+            kfree(temp);
+            kfree(temp2);
+             return err;
+        }
+        kfree(temp2);
         kbuf[i] = (char *)kmalloc(strlen(*temp)+1);
         strcpy(kbuf[i],*temp);
         int arg_len = strlen(kbuf[i]) + 1;

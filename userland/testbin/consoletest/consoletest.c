@@ -57,8 +57,8 @@ main(int argc, char **argv)
 
 	// Guru: Since exit() may not yet be implemented, just trigger a
 	// failure that the grading scripts expect to see.
-	//tprintf("Accessing invalid memory location to trigger failure\n");
-	//tprintf("%d", *((int *) 0xd34db33f));
+	tprintf("Accessing invalid memory location to trigger failure\n");
+	tprintf("%d", *((int *) 0xd34db33f));
 
 	return 0;
 }

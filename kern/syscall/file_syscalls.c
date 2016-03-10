@@ -163,6 +163,10 @@ sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
         lock_release(fdesc->fdlock);
         return EBADF;
     }
+    if((fdesc->flags & O_WRONLY) == O_WRONLY) {
+        lock_release(fdesc->fdlock);
+        return EBADF;
+    }
 
 	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_READ);
 
@@ -222,6 +226,10 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
         lock_release(fdesc->fdlock);
         return EBADF;
     }
+    /*if((fdesc->flags & O_RDONLY) == O_RDONLY) {
+         lock_release(fdesc->fdlock);
+         return EBADF;
+    }*/
 
 	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_WRITE);
 
@@ -264,7 +272,7 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 int
 sys_dup2(int oldfd, int newfd, int *retfd)
 {
-    if(oldfd < 0 || oldfd > OPEN_MAX || newfd < 0 || newfd > OPEN_MAX) {
+    if(oldfd < 0 || oldfd >= OPEN_MAX || newfd < 0 || newfd >= OPEN_MAX) {
         return EBADF;
     }
 

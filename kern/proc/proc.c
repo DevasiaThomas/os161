@@ -317,6 +317,14 @@ proc_fork(const char *name, int *err)
             child_proc->file_table[i] = curproc->file_table[i];
     }
 
+    spinlock_acquire(&curproc->p_lock);
+	if (curproc->p_cwd != NULL) {
+	    VOP_INCREF(curproc->p_cwd);
+	    child_proc->p_cwd = curproc->p_cwd;
+	}
+	spinlock_release(&curproc->p_lock);
+
+
     int errnum;
     /* set address_space */
     if(curproc->p_addrspace != NULL) {
