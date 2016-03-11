@@ -381,6 +381,9 @@ int sys___getcwd(userptr_t buf, size_t buflen, size_t *buflen_written)
     }
     *buflen_written = buflen - u_io.uio_resid;
     err = copyout(kbuf,buf,*buflen_written);
+	if(err){
+		return err;
+	}
     return 0;
 }
 
