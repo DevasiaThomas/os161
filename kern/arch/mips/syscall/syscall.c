@@ -30,6 +30,7 @@
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/syscall.h>
+#include <copyinout.h>
 #include <lib.h>
 #include <mips/trapframe.h>
 #include <thread.h>
@@ -139,11 +140,17 @@ syscall(struct trapframe *tf)
         }
 
         case SYS_lseek:
-        /* this one is tricky as offset argument (2nd argument) is of 64 bits which will take a2 and a3 both
-         * plus whence argument (3rd arg) will be on stack as all a0-14 are occupied.
-         * return value is also an offset wwhich is again 64 bits. so you need to devide it into two parts.
-         * most significant 32 bits in retval(which ultimately will be stored in v0)  and least significant 32 bits on v1.
-         */
+		{
+			int whence;
+			off_t new_pos;
+			copyin((userptr_t)tf->tf_sp+16,&whence,sizeof(int));
+			err = sys_lseek(tf->tf_a0, (((off_t)tf->tf_a2)<<32 | tf->tf_a3), whence, &new_pos);
+			retval = (int32_t)((new_pos & 0xFFFFFFFF00000000) >> 32);
+			if(!err){
+				tf->tf_v1 = (int32_t)(new_pos & 0xFFFFFFFF);
+			}
+			
+		}
         break;
 
         case SYS_dup2:
