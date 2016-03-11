@@ -12,7 +12,7 @@ extern int num_processes;
 extern int ptable_top;
 
 struct process_descriptor {
-	struct proc *proc;
+	//struct proc *proc;
     bool running;
     pid_t ppid;
     int exit_status;

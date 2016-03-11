@@ -102,10 +102,11 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     int arg_len_left = ARG_MAX;
     int padding = 0;
     userptr_t args = u_args;
-    //char *temp2 = kmalloc(ARG_MAX);
+    //char *temp2 = kmalloc(ARG_MAX*sizeof(char));
 
+    char **temp = kmalloc(sizeof(char *));
     while(1) {
-        char **temp = kmalloc(sizeof(char *));
+
         if(temp == NULL) {
             free_buffers(kbuf,i+1);
             kfree(progname);
@@ -120,7 +121,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             return err;
         }
         if(temp[0] == NULL) {
-            kfree(temp);
+//            kfree(temp);
             break;
         }
         err = copyinstr((const_userptr_t)*temp,temp2,ARG_MAX,&actual);
@@ -135,7 +136,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         strcpy(kbuf[i],*temp);
         int arg_len = strlen(kbuf[i]) + 1;
         padding = (4 - ((arg_len + 1) % 4)) % 4; //padding needed to align by 4
-        kfree(temp);
+        //kfree(temp);
         arg_len_left -= (arg_len + 1);
         if(arg_len_left <= 0) {
             free_buffers(kbuf,i+1);
@@ -148,6 +149,8 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         i++;
     }
 
+    kfree(temp);
+    //kfree(temp2);
     int argc = i;
     /* Run program */
 
@@ -272,14 +275,15 @@ return curproc->pid;
 
 void sys_exit(int exitcode){//sam 03/05
 	int i = curproc->pid;
+    struct proc *cur = curproc;
 	struct process_descriptor *pdesc = process_table[i];
 	if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
-		proc_destroy(pdesc->proc);
+		proc_destroy(cur);
 		destroy_pdesc(pdesc);
 		pdesc = process_table[i] = NULL;
 	}
 	else{
-		proc_destroy(pdesc->proc);
+		proc_destroy(cur);
 		pdesc->running = false;
 		pdesc->exit_status = _MKWAIT_EXIT(exitcode);
 		V(pdesc->wait_sem);

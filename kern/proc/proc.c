@@ -135,7 +135,7 @@ proc_create(const char *name)
                 pdesc->ppid = curproc->pid;
             }
             proc->pid = i;
-			pdesc->proc = proc;
+		//	pdesc->proc = proc;
             process_table[i] = pdesc;
             num_processes++;
             ptable_top = i;
@@ -262,7 +262,7 @@ proc_destroy(struct proc *proc)
 //destroy the pdesc created in proc_fork-> Sam03/05
 void destroy_pdesc(struct process_descriptor *pdesc){
 	sem_destroy(pdesc->wait_sem);
-	pdesc->proc = NULL;
+	//pdesc->proc = NULL;
 	kfree(pdesc);
 }
 
