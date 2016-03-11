@@ -4,6 +4,7 @@
  */
 
 #include <kern/errno.h>
+#include <kern/seek.h>
 #include <types.h>
 #include <kern/fcntl.h>
 #include <syscall.h>
@@ -262,11 +263,48 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
 int
 sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 {
-    (void)fd;
-    (void)pos;
-    (void)whence;
-    (void)new_pos;
-     return 0;
+    if (fd < 0 || fd >= OPEN_MAX) {
+        return EBADF;
+    }
+
+	struct file_descriptor *fdesc = curproc->file_table[fd];
+	if(fdesc == NULL){
+		return EBADF;
+	}
+
+	if(!(VOP_ISSEEKABLE(fdesc->vn))){
+		return ESPIPE;
+	}
+	
+	switch(whence){
+		case SEEK_SET: 
+			*new_pos = pos;
+			break;
+		case SEEK_CUR: 
+			*new_pos = fdesc->offset + pos;
+			break;
+		case SEEK_END:
+			;
+			struct stat temp;
+			int err = VOP_STAT(fdesc->vn,&temp);
+			if(err){
+				return err;
+			}
+			*new_pos = temp.st_size + pos; 
+			break;
+		default: return EINVAL;
+			break;
+	}
+	
+	if(*new_pos < 0){
+		return EINVAL;
+	}
+	else{
+		lock_acquire(fdesc->fdlock);
+		fdesc->offset = *new_pos;		
+		lock_release(fdesc->fdlock);
+	}			
+    return 0;
 }
 
 int
