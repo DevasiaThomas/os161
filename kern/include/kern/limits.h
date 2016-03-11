@@ -80,7 +80,7 @@
 #define __PID_MAX       32767
 
 /* Max number of processes allowed */
-#define __MAX_PROC      300
+#define __MAX_PROC      256
 
 /* Max open files per process */
 #define __OPEN_MAX      128
