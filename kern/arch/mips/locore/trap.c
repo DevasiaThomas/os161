@@ -29,6 +29,7 @@
 
 #include <types.h>
 #include <signal.h>
+#include <kern/wait.h>
 #include <lib.h>
 #include <mips/specialreg.h>
 #include <mips/trapframe.h>
@@ -39,7 +40,8 @@
 #include <vm.h>
 #include <mainbus.h>
 #include <syscall.h>
-
+#include <process_descriptor.h>
+#include <proc.h>
 
 /* in exception-*.S */
 extern __DEAD void asm_usermode(struct trapframe *tf);
@@ -108,13 +110,31 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		break;
 	}
 
+    (void)epc;
+    (void)code;
+    (void)vaddr;
+	struct process_descriptor *pdesc = process_table[curproc->pid];
+	if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
+		proc_destroy(pdesc->proc);
+		destroy_pdesc(pdesc);
+		pdesc = process_table[curproc->pid] = NULL;
+	}
+	else{
+		proc_destroy(pdesc->proc);
+		pdesc->running = false;
+		pdesc->exit_status = _MKWAIT_SIG(sig);
+		V(pdesc->wait_sem);
+	}
+    thread_exit();
+
 	/*
 	 * You will probably want to change this.
 	 */
 
+    /*
 	kprintf("Fatal user mode trap %u sig %d (%s, epc 0x%x, vaddr 0x%x)\n",
 		code, sig, trapcodenames[code], epc, vaddr);
-	panic("I don't know how to handle this\n");
+	panic("I don't know how to handle this\n");*/
 }
 
 /*
