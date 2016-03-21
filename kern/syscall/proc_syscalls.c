@@ -22,7 +22,7 @@
 
 #define MAX_ARG_NUM 3900
 
-//char args[65586];
+char args[65536];
 
 void childproc_init(void *tf, unsigned long junk);
 void free_buffers(char **buf, int size);
@@ -105,26 +105,26 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         err = copyin(u_args, p_arg, sizeof(char *));
         if(err) {
             kfree(progname);
-            kfree(args);
+    //        kfree(args);
             kfree(p_arg);
             return err;
         }
         if(*p_arg == NULL) {
             kfree(p_arg);
-            kfree(args);
+    //        kfree(args);
             break;
         }
         if(err) {
             kfree(progname);
             kfree(p_arg);
-            kfree(args);
+    //        kfree(args);
             return err;
         }
         err =  copyinstr((const_userptr_t)*p_arg,temp,arg_len_left,&actual);
         if(err) {
             kfree(progname);
             kfree(p_arg);
-            kfree(args);
+    //        kfree(args);
             return err;
         }
         int arg_len = actual + 1;
@@ -133,7 +133,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         if(arg_len_left <= 0) {
             kfree(progname);
             kfree(p_arg);
-            kfree(args);
+    //        kfree(args);
             return E2BIG;
         }
         copy_len += arg_len + padding + 1;
@@ -154,7 +154,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
 	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {
         kfree(progname);
-        kfree(args);
+    //    kfree(args);
 	    return result;
 	}
 
@@ -165,7 +165,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
 	as = as_create();
 	if (as == NULL) {
         vfs_close(v);
-        kfree(args);
+    //    kfree(args);
 	    return ENOMEM;
 	}
 
@@ -182,7 +182,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         }
     	/* p_addrspace will go away when curproc is destroyed */
 	    vfs_close(v);
-        kfree(args);
+    //    kfree(args);
 	    return result;
 	}
 
@@ -199,7 +199,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         }
         //free_buffers(kbuf,argc);
 	    /* p_addrspace will go away when curproc is destroyed */
-        kfree(args);
+    //    kfree(args);
 	    return result;
 	}
 
@@ -223,8 +223,9 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             if(cur_as) {
                 as_destroy(curproc->p_addrspace);
                 proc_setas(cur_as);
-                kfree(args);
+    //            kfree(args);
             }
+            kfree(ret_buf);
             return err;
         }
 
@@ -243,13 +244,13 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         if(cur_as) {
             as_destroy(curproc->p_addrspace);
             proc_setas(cur_as);
-            kfree(args);
+    //        kfree(args);
         }
         return err;
     }
 
     kfree(ret_buf);
-    kfree(args);
+    //kfree(args);
     as_destroy(cur_as);
     enter_new_process(argc, (userptr_t)stackptr,
             NULL /*userspace addr of environment*/,

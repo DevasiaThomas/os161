@@ -27,11 +27,12 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
         return EFAULT;
     }
 
-    char *buf = kmalloc(NAME_MAX*sizeof(char));
+    char buf[NAME_MAX];
+    //char *buf = kmalloc(NAME_MAX*sizeof(char));
     size_t actual_length;
     int err = copyinstr(filename, buf, NAME_MAX, &actual_length);
     if(err != 0) {
-        kfree(buf);
+    //    kfree(buf);
         return err;
     }
 
@@ -39,17 +40,17 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
 
     if (open_flags & O_RDONLY && open_flags & O_WRONLY)
     {
-        kfree(buf);
+    //    kfree(buf);
         return EINVAL;
     }
     else if(open_flags & O_RDONLY && open_flags & O_RDWR)
     {
-        kfree(buf);
+    //    kfree(buf);
         return EINVAL;
     }
     else if(open_flags & O_WRONLY && open_flags & O_RDWR)
     {
-        kfree(buf);
+    //    kfree(buf);
         return EINVAL;
     }
     else
@@ -57,7 +58,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
         struct vnode *f_vnode;
         int err = vfs_open(buf, flags, mode, &f_vnode);
         if (err){
-            kfree(buf);
+    //        kfree(buf);
             return err;
         }
         else{
@@ -68,7 +69,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 struct stat f_stat;
                 int err = VOP_STAT(f_vnode, &f_stat);
                 if (err) {
-                    kfree(buf);
+    //                kfree(buf);
                     return err;
                 }
                 offset = f_stat.st_size;
@@ -78,20 +79,20 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 i++;
             }
             if (i>=OPEN_MAX) {
-                kfree(buf);
+    //            kfree(buf);
                 return EMFILE;
             }
             else {
                 struct file_descriptor *fdesc = kmalloc(sizeof(struct file_descriptor));
                 if (fdesc == NULL) {
-                    kfree(buf);
+    //                kfree(buf);
                     return ENOMEM;
                 }
                 ///strcpy(fdesc->filename,(char *)filename);
                 fdesc->fdlock = lock_create(buf);
                 if (fdesc->fdlock == NULL) {
                     kfree(fdesc);
-                    kfree(buf);
+    //                kfree(buf);
                     return ENOMEM;
                 }
                 fdesc->offset = offset;
@@ -100,7 +101,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 fdesc->flags = flags;
                 curproc->file_table[i] = fdesc;
                 *fd = i;
-                kfree(buf);
+    //            kfree(buf);
                 return 0;
             }
         }
