@@ -92,7 +92,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         return EISDIR;
     }
 
-    char *args = kmalloc(65586);
+    char *args = kmalloc(65536);
 
     int i = 0;
     int copy_len = 0;
