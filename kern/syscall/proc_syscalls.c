@@ -20,7 +20,7 @@
 #include <proc.h>
 #include <file_descriptor.h>
 
-char args[65520];
+char args[65536];
 
 void childproc_init(void *tf, unsigned long junk);
 
@@ -63,11 +63,7 @@ childproc_init(void *tf, unsigned long junk)
 int
 sys_execv(userptr_t u_progname, userptr_t u_args)
 {
-    (void)u_progname;
-    (void)u_args;
-    return 0;
-}
-/*    char *progname = kmalloc(NAME_MAX * sizeof(char));
+    char *progname = kmalloc(NAME_MAX * sizeof(char));
     size_t actual;
     int err;
     err = copyinstr(u_progname, progname, NAME_MAX, &actual);
@@ -83,6 +79,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     int i = 0;
     int copy_len = 0;
     int arg_len_left = ARG_MAX;
+    int arg_len = 0;
     int padding = 0;
     char **p_arg = kmalloc(sizeof(char *));
     char *temp = args;
@@ -111,10 +108,9 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             kfree(progname);
             kfree(p_arg);
     //        kfree(args);
-
-    return err;
+            return err;
         }
-        int arg_len = actual + 1;
+        arg_len = actual + 1;
         padding = (4 - ((arg_len + 1) % 4)) % 4; //padding needed to align by 4
         arg_len_left -= (arg_len + 1);
         if(arg_len_left <= 0) {
@@ -128,84 +124,85 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         temp += actual;
         i++;
     }
-*/
-//    int argc = i;
+
+    int argc = i;
     /* Run program */
-/*
+
     struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
-	int result;
-*/
+//	int result;
+
 	/* Open the file. */
-/*	result = vfs_open(progname, O_RDONLY, 0, &v);
-	if (result) {
+	err = vfs_open(progname, O_RDONLY, 0, &v);
+	if (err) {
         kfree(progname);
     //    kfree(args);
-	    return result;
+	    return err;
 	}
 
     kfree(progname);
     struct addrspace *cur_as = proc_getas();
-*/
+
 	/* Create a new address space. */
-/*	as = as_create();
+	as = as_create();
 	if (as == NULL) {
         vfs_close(v);
     //    kfree(args);
 	    return ENOMEM;
 	}
-*/
+
 	/* Switch to it and activate it. */
-//	proc_setas(as);
-//	as_activate();
+	proc_setas(as);
+	as_activate();
 
 	/* Load the executable. */
-//    result = load_elf(v, &entrypoint);
-//	if (result) {
-//        if(cur_as) {
-//            as_destroy(curproc->p_addrspace);
-//            proc_setas(cur_as);
-//        }
+    err = load_elf(v, &entrypoint);
+	if (err) {
+        if(err) {
+            as_destroy(curproc->p_addrspace);
+            proc_setas(cur_as);
+        }
     	/* p_addrspace will go away when curproc is destroyed */
-//	    vfs_close(v);
+	    vfs_close(v);
     //    kfree(args);
-//	    return result;
-//	}
+	    return err;
+	}
 
 
 	/* Done with the file now. */
-//	vfs_close(v);
+	vfs_close(v);
 
 	/* Define the user stack in the address space */
-//	result = as_define_stack(as, &stackptr);
-//	if (result) {
-//        if(cur_as) {
-//           as_destroy(curproc->p_addrspace);
-//            proc_setas(cur_as);
-//        }
+    err = as_define_stack(as, &stackptr);
+	if (err) {
+        if(cur_as) {
+           as_destroy(curproc->p_addrspace);
+            proc_setas(cur_as);
+        }
         //free_buffers(kbuf,argc);
 	    /* p_addrspace will go away when curproc is destroyed */
     //    kfree(args);
-//	    return result;
-//	}
+	    return err;
+	}
 
-//    copy_len += 4*(argc + 1);
+    copy_len += 4*(argc + 1);
 
     /* set the stackptr */
-//    stackptr -= copy_len;
-//    int prev_offset = 0;
-//    char **ret_buf = kmalloc((argc + 1)*sizeof(char *));
+    stackptr -= copy_len;
+    int prev_offset = 0;
+    char **ret_buf = kmalloc((argc + 1)*sizeof(char *));
+    char *dest = NULL;
     /* moving contents from kernel buffer to user stack */
 
     //u_args = args;
-/*    temp = args;
+    temp = args;
     for (i = 0; i < argc; i++)
     {
-        int arg_length = strlen(temp);
-        int padding = (4 - ((arg_length + 1) % 4)) % 4;
-        char *dest = (char *)stackptr + (argc + 1) * 4 + prev_offset;
-        err = copyout(temp, (userptr_t)dest, (size_t)arg_length + 1);
+        arg_len = strlen(temp);
+        padding = (4 - ((arg_len + 1) % 4)) % 4;
+        dest = (char *)stackptr + (argc + 1) * 4 + prev_offset;
+        err = copyout(temp, (userptr_t)dest, (size_t)arg_len + 1);
         if (err) {
             if(cur_as) {
                 as_destroy(curproc->p_addrspace);
@@ -216,13 +213,13 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             return err;
         }
 
-        for (int k = arg_length; k < arg_length + padding; k++)
+        for (int k = arg_len; k < arg_len + padding; k++)
         {
             dest[k] = '\0';
         }
         ret_buf[i] = (char *)dest;
-        prev_offset += (arg_length + padding + 1);
-        temp += arg_length + 1;
+        prev_offset += (arg_len + padding + 1);
+        temp += arg_len + 1;
     }
 
     ret_buf[argc] = NULL;
@@ -240,13 +237,13 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     //kfree(args);
     as_destroy(cur_as);
     enter_new_process(argc, (userptr_t)stackptr,
-*///            NULL /*userspace addr of environment*/,
- //           stackptr, entrypoint);
+            NULL /*userspace addr of environment*/,
+            stackptr, entrypoint);
 
     /* enter_new_process does not return. */
-//    	panic("enter_new_process returned\n");
-//    return EINVAL;
-//}
+    	panic("enter_new_process returned\n");
+    return EINVAL;
+}
 
 pid_t
 sys_getpid()
