@@ -88,7 +88,8 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         return err;
     }
     if(strcmp(progname,"") == 0) {
-         return EISDIR;
+        kfree(progname);
+        return EISDIR;
     }
 
     int i = 0;
@@ -96,7 +97,6 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     int arg_len_left = ARG_MAX;
     int padding = 0;
     char **p_arg = kmalloc(sizeof(char *));
-
     char *temp = args;
     while(1) {
 
@@ -117,7 +117,9 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         }
         err =  copyinstr((const_userptr_t)*p_arg,temp,arg_len_left,&actual);
         if(err) {
+            kfree(progname);
             kfree(p_arg);
+            return err;
         }
         int arg_len = actual + 1;
         padding = (4 - ((arg_len + 1) % 4)) % 4; //padding needed to align by 4
