@@ -74,8 +74,6 @@ runprogram(char *progname)
 	as = as_create();
 	if (as == NULL) {
 	    vfs_close(v);
-        kprintf("address space creation failed\n");
-        kprintf(".");
 	    return ENOMEM;
 	}
 

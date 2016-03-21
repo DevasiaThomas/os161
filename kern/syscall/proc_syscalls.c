@@ -20,10 +20,9 @@
 #include <proc.h>
 #include <file_descriptor.h>
 
-char args[65536];
+char args[65520];
 
 void childproc_init(void *tf, unsigned long junk);
-void free_buffers(char **buf, int size);
 
 int
 sys_fork(struct trapframe *tf, pid_t *ret_pid)
@@ -60,19 +59,6 @@ childproc_init(void *tf, unsigned long junk)
     child_tf.tf_epc += 4;
     mips_usermode(&child_tf);
 }
-
-void
-free_buffers(char **buf, int size) {
-    for(int i = 0; i < size; i++) {
-        if(buf[i]) {
-            kfree(buf[i]);
-        }
-    }
-    if(buf) {
-        kfree(buf);
-    }
-}
-
 
 int
 sys_execv(userptr_t u_progname, userptr_t u_args)
