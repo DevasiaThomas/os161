@@ -20,8 +20,6 @@
 #include <proc.h>
 #include <file_descriptor.h>
 
-#define MAX_ARG_NUM 3900
-
 char args[65536];
 
 void childproc_init(void *tf, unsigned long junk);
@@ -91,8 +89,6 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         kfree(progname);
         return EISDIR;
     }
-
-    char *args = kmalloc(65536);
 
     int i = 0;
     int copy_len = 0;
