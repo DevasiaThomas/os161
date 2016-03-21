@@ -22,7 +22,7 @@
 
 #define MAX_ARG_NUM 3900
 
-//char temp2[ARG_MAX];
+char args[65586];
 
 void childproc_init(void *tf, unsigned long junk);
 void free_buffers(char **buf, int size);
@@ -91,67 +91,48 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
          return EISDIR;
     }
 
-    char **kbuf = kmalloc(MAX_ARG_NUM*sizeof(char *));
-
-    /*err = copyin(u_args,args,MAX_ARG_NUM);
-    if (err){
-        return err;
-    }*/
     int i = 0;
     int copy_len = 0;
     int arg_len_left = ARG_MAX;
     int padding = 0;
-    userptr_t args = u_args;
-    char *temp2 = kmalloc(sizeof(char));
+    char **p_arg = kmalloc(sizeof(char *));
 
-    char **temp = kmalloc(sizeof(char *));
+    char *temp = args;
     while(1) {
 
-        if(temp == NULL) {
-            free_buffers(kbuf,i+1);
-            kfree(progname);
-            kfree(temp);
-            return ENOMEM;
-        }
-        err = copyin(u_args, temp, sizeof(char *));
+        err = copyin(u_args, p_arg, sizeof(char *));
         if(err) {
-            free_buffers(kbuf,i+1);
             kfree(progname);
-            kfree(temp);
+            kfree(p_arg);
             return err;
         }
-        if(temp[0] == NULL) {
-//            kfree(temp);
+        if(*p_arg == NULL) {
+            kfree(p_arg);
             break;
         }
-        //err = copyinstr((const_userptr_t)*temp,temp2,ARG_MAX,&actual);
-        err = copyin((const_userptr_t)*temp, temp2, 1);
         if(err) {
-            free_buffers(kbuf,i+1);
             kfree(progname);
-            kfree(temp);
-            //kfree(temp2);
+            kfree(p_arg);
             return err;
         }
-        kbuf[i] = (char *)kmalloc(strlen(*temp)+1);
-        strcpy(kbuf[i],*temp);
-        int arg_len = strlen(kbuf[i]) + 1;
+        err =  copyinstr((const_userptr_t)*p_arg,temp,arg_len_left,&actual);
+        if(err) {
+            kfree(p_arg);
+        }
+        int arg_len = actual + 1;
         padding = (4 - ((arg_len + 1) % 4)) % 4; //padding needed to align by 4
-        //kfree(temp);
         arg_len_left -= (arg_len + 1);
         if(arg_len_left <= 0) {
-            free_buffers(kbuf,i+1);
             kfree(progname);
-            kfree(temp);
+            kfree(p_arg);
             return E2BIG;
         }
         copy_len += arg_len + padding + 1;
         u_args += sizeof(char *);
+        temp += actual;
         i++;
     }
 
-    kfree(temp);
-    //kfree(temp2);
     int argc = i;
     /* Run program */
 
@@ -163,7 +144,6 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {
-        free_buffers(kbuf,argc);
         kfree(progname);
 	    return result;
 	}
@@ -174,7 +154,6 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
 	/* Create a new address space. */
 	as = as_create();
 	if (as == NULL) {
-        free_buffers(kbuf,argc);
         vfs_close(v);
 	    return ENOMEM;
 	}
@@ -190,7 +169,6 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             as_destroy(curproc->p_addrspace);
             proc_setas(cur_as);
         }
-        free_buffers(kbuf,argc);
     	/* p_addrspace will go away when curproc is destroyed */
 	    vfs_close(v);
 	    return result;
@@ -207,7 +185,7 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
            as_destroy(curproc->p_addrspace);
             proc_setas(cur_as);
         }
-        free_buffers(kbuf,argc);
+        //free_buffers(kbuf,argc);
 	    /* p_addrspace will go away when curproc is destroyed */
 	    return result;
 	}
@@ -220,19 +198,19 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     char **ret_buf = kmalloc((argc + 1)*sizeof(char *));
     /* moving contents from kernel buffer to user stack */
 
-    u_args = args;
+    //u_args = args;
+    temp = args;
     for (i = 0; i < argc; i++)
     {
-        int arg_length = strlen(kbuf[i]);
+        int arg_length = strlen(temp);
         int padding = (4 - ((arg_length + 1) % 4)) % 4;
         char *dest = (char *)stackptr + (argc + 1) * 4 + prev_offset;
-        err = copyout(kbuf[i], (userptr_t)dest, (size_t)arg_length + 1);
+        err = copyout(temp, (userptr_t)dest, (size_t)arg_length + 1);
         if (err) {
             if(cur_as) {
                 as_destroy(curproc->p_addrspace);
                 proc_setas(cur_as);
             }
-            free_buffers(kbuf,argc);
             return err;
         }
 
@@ -240,9 +218,9 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         {
             dest[k] = '\0';
         }
-        ret_buf[i] = kmalloc(arg_length + padding + 1);
         ret_buf[i] = (char *)dest;
         prev_offset += (arg_length + padding + 1);
+        temp += arg_length + 1;
     }
 
     ret_buf[argc] = NULL;
@@ -252,12 +230,10 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             as_destroy(curproc->p_addrspace);
             proc_setas(cur_as);
         }
-        free_buffers(kbuf,argc);
         return err;
     }
 
-    free_buffers(kbuf,argc);
-    //free_buffers(ret_buf,argc+1);
+    kfree(ret_buf);
     as_destroy(cur_as);
     enter_new_process(argc, (userptr_t)stackptr,
             NULL /*userspace addr of environment*/,

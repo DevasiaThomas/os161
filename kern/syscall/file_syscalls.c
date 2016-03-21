@@ -141,8 +141,6 @@ sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
 {
     struct iovec iov;
     struct uio u_io;
-	char kbuf[nbytes];
-	int err;
 
     if (buf == NULL) {
         return EFAULT;
@@ -169,18 +167,29 @@ sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
         return EBADF;
     }
 
-	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_READ);
+	//uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_READ);
+
+    iov.iov_ubase = buf;
+    iov.iov_len = nbytes;
+    u_io.uio_iov = &iov;
+    u_io.uio_iovcnt = 1;
+    u_io.uio_resid = nbytes;
+    u_io.uio_offset = fdesc->offset;
+    u_io.uio_segflg = UIO_USERSPACE;
+    u_io.uio_rw = UIO_READ;
+	u_io.uio_space = curproc->p_addrspace;
+
 
 	int result = VOP_READ(fdesc->vn, &u_io);
 	if (result) {
         lock_release(fdesc->fdlock);
         return result;
     }
-	err=copyout(kbuf,buf,nbytes);
-	if(err){
-		lock_release(fdesc->fdlock);
-		return err;
-	}
+	//err=copyout(kbuf,buf,nbytes);
+	//if(err){
+	//	lock_release(fdesc->fdlock);
+	//	return err;
+	//}
     *nbytes_read = nbytes - u_io.uio_resid;
     fdesc->offset += (*nbytes_read);
     lock_release(fdesc->fdlock);
@@ -192,8 +201,6 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
 {
     struct iovec iov;
     struct uio u_io;
-	char kbuf[nbytes];
-	int err;
 
 	if (fd < 0 || fd >= OPEN_MAX) {
         return EBADF;
@@ -209,33 +216,22 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
 
 	lock_acquire(fdesc->fdlock);
 
-	err = copyin(buf,kbuf,nbytes);
-	if(err){
-		lock_release(fdesc->fdlock);
-		return err;
-	}
-
-    /*
-	if (buf == NULL) {
-        return EFAULT;
-    }
-	*/
-
+	//err = copyin(buf,kbuf,nbytes);
+	//if(err){
+	//	lock_release(fdesc->fdlock);
+	//	return err;
+	//}
 
     if (!((fdesc->flags & O_WRONLY) == O_WRONLY || (fdesc->flags & O_RDWR) == O_RDWR))
     {
         lock_release(fdesc->fdlock);
         return EBADF;
     }
-    /*if((fdesc->flags & O_RDONLY) == O_RDONLY) {
-         lock_release(fdesc->fdlock);
-         return EBADF;
-    }*/
 
-	uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_WRITE);
+	//uio_kinit(&iov,&u_io,kbuf,nbytes,fdesc->offset,UIO_WRITE);
 
-	/* Sam 03/04
-    iov.iov_ubase = (userptr_t)kbuf;
+	// Sam 03/04
+    iov.iov_ubase = buf;
     iov.iov_len = nbytes;
     u_io.uio_iov = &iov;
     u_io.uio_iovcnt = 1;
@@ -244,8 +240,6 @@ sys_write(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_written)
     u_io.uio_segflg = UIO_USERSPACE;
     u_io.uio_rw = UIO_WRITE;
 	u_io.uio_space = curproc->p_addrspace;
-	*/
-
 
     int result = VOP_WRITE(fdesc->vn, &u_io);
     if (result) {
@@ -275,12 +269,12 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 	if(!(VOP_ISSEEKABLE(fdesc->vn))){
 		return ESPIPE;
 	}
-	
+
 	switch(whence){
-		case SEEK_SET: 
+		case SEEK_SET:
 			*new_pos = pos;
 			break;
-		case SEEK_CUR: 
+		case SEEK_CUR:
 			*new_pos = fdesc->offset + pos;
 			break;
 		case SEEK_END:
@@ -290,20 +284,20 @@ sys_lseek(int fd, off_t pos, int whence, off_t *new_pos)
 			if(err){
 				return err;
 			}
-			*new_pos = temp.st_size + pos; 
+			*new_pos = temp.st_size + pos;
 			break;
 		default: return EINVAL;
 			break;
 	}
-	
+
 	if(*new_pos < 0){
 		return EINVAL;
 	}
 	else{
 		lock_acquire(fdesc->fdlock);
-		fdesc->offset = *new_pos;		
+		fdesc->offset = *new_pos;
 		lock_release(fdesc->fdlock);
-	}			
+	}
     return 0;
 }
 
