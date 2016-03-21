@@ -63,7 +63,11 @@ childproc_init(void *tf, unsigned long junk)
 int
 sys_execv(userptr_t u_progname, userptr_t u_args)
 {
-    char *progname = kmalloc(NAME_MAX * sizeof(char));
+    (void)u_progname;
+    (void)u_args;
+    return 0;
+}
+/*    char *progname = kmalloc(NAME_MAX * sizeof(char));
     size_t actual;
     int err;
     err = copyinstr(u_progname, progname, NAME_MAX, &actual);
@@ -107,7 +111,8 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
             kfree(progname);
             kfree(p_arg);
     //        kfree(args);
-            return err;
+
+    return err;
         }
         int arg_len = actual + 1;
         padding = (4 - ((arg_len + 1) % 4)) % 4; //padding needed to align by 4
@@ -123,17 +128,17 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
         temp += actual;
         i++;
     }
-
-    int argc = i;
+*/
+//    int argc = i;
     /* Run program */
-
+/*
     struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
-
+*/
 	/* Open the file. */
-	result = vfs_open(progname, O_RDONLY, 0, &v);
+/*	result = vfs_open(progname, O_RDONLY, 0, &v);
 	if (result) {
         kfree(progname);
     //    kfree(args);
@@ -142,59 +147,59 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
 
     kfree(progname);
     struct addrspace *cur_as = proc_getas();
-
+*/
 	/* Create a new address space. */
-	as = as_create();
+/*	as = as_create();
 	if (as == NULL) {
         vfs_close(v);
     //    kfree(args);
 	    return ENOMEM;
 	}
-
+*/
 	/* Switch to it and activate it. */
-	proc_setas(as);
-	as_activate();
+//	proc_setas(as);
+//	as_activate();
 
 	/* Load the executable. */
-    result = load_elf(v, &entrypoint);
-	if (result) {
-        if(cur_as) {
-            as_destroy(curproc->p_addrspace);
-            proc_setas(cur_as);
-        }
+//    result = load_elf(v, &entrypoint);
+//	if (result) {
+//        if(cur_as) {
+//            as_destroy(curproc->p_addrspace);
+//            proc_setas(cur_as);
+//        }
     	/* p_addrspace will go away when curproc is destroyed */
-	    vfs_close(v);
+//	    vfs_close(v);
     //    kfree(args);
-	    return result;
-	}
+//	    return result;
+//	}
 
 
 	/* Done with the file now. */
-	vfs_close(v);
+//	vfs_close(v);
 
 	/* Define the user stack in the address space */
-	result = as_define_stack(as, &stackptr);
-	if (result) {
-        if(cur_as) {
-           as_destroy(curproc->p_addrspace);
-            proc_setas(cur_as);
-        }
+//	result = as_define_stack(as, &stackptr);
+//	if (result) {
+//        if(cur_as) {
+//           as_destroy(curproc->p_addrspace);
+//            proc_setas(cur_as);
+//        }
         //free_buffers(kbuf,argc);
 	    /* p_addrspace will go away when curproc is destroyed */
     //    kfree(args);
-	    return result;
-	}
+//	    return result;
+//	}
 
-    copy_len += 4*(argc + 1);
+//    copy_len += 4*(argc + 1);
 
     /* set the stackptr */
-    stackptr -= copy_len;
-    int prev_offset = 0;
-    char **ret_buf = kmalloc((argc + 1)*sizeof(char *));
+//    stackptr -= copy_len;
+//    int prev_offset = 0;
+//    char **ret_buf = kmalloc((argc + 1)*sizeof(char *));
     /* moving contents from kernel buffer to user stack */
 
     //u_args = args;
-    temp = args;
+/*    temp = args;
     for (i = 0; i < argc; i++)
     {
         int arg_length = strlen(temp);
@@ -235,13 +240,13 @@ sys_execv(userptr_t u_progname, userptr_t u_args)
     //kfree(args);
     as_destroy(cur_as);
     enter_new_process(argc, (userptr_t)stackptr,
-            NULL /*userspace addr of environment*/,
-            stackptr, entrypoint);
+*///            NULL /*userspace addr of environment*/,
+ //           stackptr, entrypoint);
 
     /* enter_new_process does not return. */
-    	panic("enter_new_process returned\n");
-    return EINVAL;
-}
+//    	panic("enter_new_process returned\n");
+//    return EINVAL;
+//}
 
 pid_t
 sys_getpid()
