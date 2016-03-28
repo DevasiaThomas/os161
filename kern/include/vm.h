@@ -44,12 +44,32 @@
 #define VM_FAULT_WRITE       1    /* A write was attempted */
 #define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
 
+/* Physical page states */
+#define PS_FREE 3
+#define PS_FIXED 4
+#define PS_CLEAN 5
+#define PS_DIRTY 6
+#define PS_VICTIM 7
 
 /* Initialization function */
 void vm_bootstrap(void);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
+
+/* coremap_entry */
+
+struct coremap_entry {
+    unsigned page_state;
+    unsigned block_size;
+    vaddr_t vaddr;
+    struct addrspace *as;
+};
+
+extern struct coremap_entry *coremap;
+extern struct spinlock splk_coremap;
+extern unsigned num_total_page;
+extern unsigned num_allocated_pages;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
@@ -61,6 +81,8 @@ void free_kpages(vaddr_t addr);
  * to the caller. But it should have been correct at some point in time.
  */
 unsigned int coremap_used_bytes(void);
+
+void debug_vm(void);
 
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);

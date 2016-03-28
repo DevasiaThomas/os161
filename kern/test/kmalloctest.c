@@ -154,6 +154,7 @@ kmallocstress(int nargs, char **args)
 	}
 
 	sem_destroy(sem);
+    debug_vm();
 	kprintf("\n");
 	success(TEST161_SUCCESS, SECRET, "km2");
 
@@ -337,8 +338,7 @@ kmalloctest4thread(void *sm, unsigned long num)
 	for (i=0; i<NTRIES; i++) {
 		PROGRESS(i);
 		if (ptrs[q] != NULL) {
-			kfree(ptrs[q]);
-			ptrs[q] = NULL;
+            kfree(ptrs[q]);
 		}
 		ptrs[p] = kmalloc(sizes[p] * PAGE_SIZE);
 		if (ptrs[p] == NULL) {
@@ -409,6 +409,7 @@ kmalloctest4(int nargs, char **args)
 
 	sem_destroy(sem);
 
+    debug_vm();
 	kprintf("\n");
 	success(TEST161_SUCCESS, SECRET, "km4");
 	return 0;
