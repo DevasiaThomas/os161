@@ -12,7 +12,6 @@
 #include <addrspace.h>
 #include <vm.h>
 
-static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 struct spinlock splk_coremap;
 unsigned num_allocated_pages = 0;
 unsigned num_total_pages = 0;
@@ -101,14 +100,6 @@ alloc_kpages(unsigned npages)
             coremap[j].as = NULL;
         }
         bzero((void *)coremap[start_index].vaddr, npages*PAGE_SIZE);
-    }
-    else {
-        spinlock_acquire(&stealmem_lock);
-        pa = ram_stealmem(npages);
-        if(pa) {
-            num_allocated_pages += npages;
-        }
-        spinlock_release(&stealmem_lock);
     }
 
     return PADDR_TO_KVADDR(pa);
