@@ -82,7 +82,7 @@
  * grows downwards.
  */
 #define USERSTACK     USERSPACETOP
-
+#define USERSTACKBASE USERSTACK - 8*1024*1024
 /*
  * Interface to the low-level module that looks after the amount of
  * physical memory we have.
@@ -117,10 +117,8 @@ paddr_t ram_getfirstfree(void);
  */
 
 struct tlbshootdown {
-	/*
-	 * Change this to what you need for your VM design.
-	 */
-	int ts_placeholder;
+    struct addrspace *ts_as;
+    vaddr_t ts_vaddr;
 };
 
 #define TLBSHOOTDOWN_MAX 16

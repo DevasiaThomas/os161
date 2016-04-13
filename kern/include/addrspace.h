@@ -30,6 +30,10 @@
 #ifndef _ADDRSPACE_H_
 #define _ADDRSPACE_H_
 
+#define AS_READABLE 0x4
+#define AS_WRITEABLE 0x2
+#define AS_EXECUTABLE 0x1
+
 /*
  * Address space structure and operations.
  */
@@ -40,7 +44,21 @@
 
 struct vnode;
 
+struct page_table_entry{
+    vaddr_t vaddr;
+    paddr_t paddr;
+    //struct page_table_entry * next;
+};
 
+
+struct region_entry{
+    vaddr_t reg_base;
+    size_t bounds;
+    int original_permissions;
+    int temp_permissions; //only for loadelf
+    struct region_entry *next;
+
+};
 /*
  * Address space - data structure associated with the virtual memory
  * space of a process.
@@ -58,7 +76,12 @@ struct addrspace {
         size_t as_npages2;
         paddr_t as_stackpbase;
 #else
-        /* Put stuff here for your VM system */
+        struct page_table_entry *****page_table;
+        struct region_entry* regions;
+        vaddr_t heap_start;
+        vaddr_t heap_end;
+        vaddr_t stack_end;
+        struct wchan *swap_wc;
 #endif
 };
 
@@ -118,6 +141,9 @@ int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
 
+struct page_table_entry* add_pte(struct addrspace *as, vaddr_t vaddr, paddr_t paddr);
+struct page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr);
+struct region_entry* add_region(struct addrspace *as, vaddr_t base, size_t sz, int readable, int writeable, int executable);
 
 /*
  * Functions in loadelf.c

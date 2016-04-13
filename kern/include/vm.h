@@ -57,6 +57,9 @@ void vm_bootstrap(void);
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
 
+/* Check if valid address */
+bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
+
 /* coremap_entry */
 
 struct coremap_entry {
