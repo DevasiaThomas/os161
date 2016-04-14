@@ -71,6 +71,7 @@ struct coremap_entry {
 
 extern struct coremap_entry *coremap;
 extern struct spinlock splk_coremap;
+extern struct spinlock splk_copy;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
 
@@ -78,6 +79,8 @@ extern unsigned num_allocated_pages;
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
+paddr_t page_alloc(unsigned npages, vaddr_t vaddr, struct addrspace *as);
+void page_free(paddr_t paddr);
 /*
  * Return amount of memory (in bytes) used by allocated coremap pages.  If
  * there are ongoing allocations, this value could change after it is returned

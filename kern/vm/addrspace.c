@@ -36,11 +36,6 @@
 #include <vm.h>
 #include <proc.h>
 
-#define TOP_TABLE       0xf8000000
-#define SECOND_LEVEL    0x07c00000
-#define THIRD_LEVEL     0x003e0000
-#define FORTH_LEVEL     0x0001f000
-
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
  * assignment, this file is not compiled or linked or in any way
@@ -68,7 +63,7 @@ free_page_table(struct page_table_entry *pte) {
 int copy_page_table(struct addrspace *, struct addrspace *newas);
 void free_list(struct region_entry*);
 void free_page_table(struct page_table_entry *****);
-int copy_regions(struct addrspace *, struct addrspace *);
+int copy_regions(struct addrspace *, struct region_entry **);
 
 int
 copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
@@ -77,6 +72,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
     struct page_table_entry *****old_page_table = old_as->page_table;
     struct page_table_entry *****new_page_table = new_as->page_table;
 
+    spinlock_acquire(&splk_copy);
     for(int i=0; i < 256; i++) {
         if(old_page_table[i] != NULL) {
             new_page_table[i] = kmalloc(256*sizeof(struct page_table_entry ***));
@@ -102,7 +98,17 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                         return ENOMEM;
                                     }
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
-                                    new_page_table[i][j][k][l]->paddr = 0;
+                                    if(old_page_table[i][j][k][l]->paddr != 0) {
+                                        new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_as);
+                                        if(new_page_table[i][j][k][l] == 0) {
+                                            return ENOMEM;
+                                        }
+                                        memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
+                                        coremap[new_page_table[i][j][k][l]->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+                                    }
+                                    else {
+                                        new_page_table[i][j][k][l]->paddr = 0;
+                                    }
                                 }
                                 else {
                                     new_page_table[i][j][k][l] = NULL;
@@ -123,6 +129,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
             new_page_table[i] = NULL;
         }
     }
+    spinlock_release(&splk_copy);
 
     return 0;
 //  linked list implementation
@@ -184,47 +191,52 @@ free_list(struct region_entry *reg_list) {
 
 
 int
-copy_regions(struct addrspace *old_as, struct addrspace *new_as)
+copy_regions(struct addrspace *old_as, struct region_entry **newreg)
 {
-    struct region_entry *t_oldreg = old_as->regions;
+
 
     if(old_as->regions == NULL) {
-        new_as->regions = NULL;
+        *newreg = NULL;
         return 0;
     }
 
-    bool head = false;
-    struct region_entry *t_newreg = kmalloc(sizeof(struct region_entry));
-    if(t_newreg == NULL) {
-        return ENOMEM;
-    }
+    struct region_entry *t_oldreg = old_as->regions;
+    struct region_entry *t_newreg = NULL;
+    struct region_entry *head = NULL;
 
     do {
-        if(head == false) {
-            head = true;
-            t_newreg->reg_base = t_oldreg->reg_base;
-            t_newreg->bounds = t_oldreg->bounds;
-            t_newreg->original_permissions = t_oldreg->original_permissions;
-            t_newreg->temp_permissions = t_oldreg->temp_permissions;
-            new_as->regions = t_newreg;
-            t_oldreg = t_oldreg->next;
-        }
-        else {
+        if(t_newreg == NULL) {
             struct region_entry *temp = kmalloc(sizeof(struct region_entry));
             if(temp == NULL) {
-                free_list(new_as->regions);
                 return ENOMEM;
             }
             temp->reg_base = t_oldreg->reg_base;
             temp->bounds = t_oldreg->bounds;
             temp->original_permissions = t_oldreg->original_permissions;
             temp->temp_permissions = t_oldreg->temp_permissions;
+            temp->next = NULL;
+            head = temp;
+            t_newreg = temp;
+            t_oldreg = t_oldreg->next;
+        }
+        else {
+            struct region_entry *temp = kmalloc(sizeof(struct region_entry));
+            if(temp == NULL) {
+                free_list(head);
+                return ENOMEM;
+            }
+            temp->reg_base = t_oldreg->reg_base;
+            temp->bounds = t_oldreg->bounds;
+            temp->original_permissions = t_oldreg->original_permissions;
+            temp->temp_permissions = t_oldreg->temp_permissions;
+            temp->next = NULL;
             t_newreg->next = temp;
             t_newreg = temp;
             t_oldreg = t_oldreg->next;
         }
     } while(t_oldreg);
 
+    *newreg = head;
     return 0;
 
 }
@@ -243,6 +255,7 @@ free_page_table(struct page_table_entry *****page_table)
                         if(page_table[i][j][k] != NULL) {
                             for(int l=0; l < 256; l++) {
                                 if(page_table[i][j][k][l] != NULL) {
+                                    page_free(page_table[i][j][k][l]->paddr);
                                     kfree(page_table[i][j][k][l]);
                                 }
                             }
@@ -304,7 +317,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
          return err;
     }
 
-    err = copy_regions(old, newas);
+    err = copy_regions(old, &newas->regions);
     if(err) {
         free_page_table(newas->page_table);
         newas->page_table = NULL;
@@ -383,7 +396,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 
     memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
     vaddr = vaddr & PAGE_FRAME;
-    memsize = (memsize + PAGE_SIZE) & PAGE_FRAME;
+    memsize = (memsize + PAGE_SIZE -1) & PAGE_FRAME;
     struct region_entry *new_region = add_region(as, vaddr, memsize, readable, writeable, executable);
     if(new_region == NULL) {
          return ENOMEM;
@@ -432,21 +445,21 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 }
 
 struct page_table_entry*
-get_pte(struct addrspace *as, vaddr_t vaddr) {
+get_pte(struct addrspace *as,const vaddr_t faultaddress) {
     /* 4-level page table implementation */
-    int top_index = TOP_INDEX(vaddr);
+    int top_index = TOP_INDEX(faultaddress);
     if(as->page_table[top_index] == NULL)
         return NULL;
 
-    int second_index = SECOND_INDEX(vaddr);
+    int second_index = SECOND_INDEX(faultaddress);
     if(as->page_table[top_index][second_index] == NULL)
         return NULL;
 
-    int third_index = THIRD_INDEX(vaddr);
+    int third_index = THIRD_INDEX(faultaddress);
     if(as->page_table[top_index][second_index][third_index] == NULL)
         return NULL;
 
-    int forth_index = FORTH_INDEX(vaddr);
+    int forth_index = FORTH_INDEX(faultaddress);
     if(as->page_table[top_index][second_index][third_index][forth_index] == NULL)
         return NULL;
 

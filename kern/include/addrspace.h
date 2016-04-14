@@ -147,7 +147,7 @@ int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
 
 struct page_table_entry* add_pte(struct addrspace *as, vaddr_t vaddr, paddr_t paddr);
-struct page_table_entry* get_pte(struct addrspace *as, vaddr_t vaddr);
+struct page_table_entry* get_pte(struct addrspace *as, const vaddr_t faultaddress);
 struct region_entry* add_region(struct addrspace *as, vaddr_t base, size_t sz, int readable, int writeable, int executable);
 
 /*

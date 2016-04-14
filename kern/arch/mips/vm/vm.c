@@ -14,6 +14,7 @@
 
 struct spinlock splk_coremap;
 struct spinlock splk_tlb;
+struct spinlock splk_copy;
 unsigned num_allocated_pages = 0;
 unsigned num_total_pages = 0;
 struct coremap_entry *coremap;
@@ -50,9 +51,9 @@ vm_bootstrap()
     vm_bootstrapped = true;
 
     spinlock_init(&splk_tlb);
+    spinlock_init(&splk_copy);
 }
 
-static
 paddr_t
 page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
 {
@@ -104,6 +105,18 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
     bzero((void *)PADDR_TO_KVADDR(pa), npages*PAGE_SIZE);
 
     return pa;
+}
+
+void
+page_free(paddr_t paddr)
+{
+    spinlock_acquire(&splk_coremap);
+    unsigned index = paddr/PAGE_SIZE;
+    coremap[index].page_state = PS_FREE;
+    coremap[index].block_size = 0;
+    coremap[index].vaddr = 0;
+    coremap[index].as = NULL;
+    spinlock_release(&splk_coremap);
 }
 
 vaddr_t
