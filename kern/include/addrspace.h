@@ -30,6 +30,11 @@
 #ifndef _ADDRSPACE_H_
 #define _ADDRSPACE_H_
 
+#define TOP_INDEX(vaddr)    (((vaddr) & 0xf8000000) >> 27)
+#define SECOND_INDEX(vaddr) (((vaddr) & 0x07c00000) >> 22)
+#define THIRD_INDEX(vaddr)  (((vaddr) & 0x003e0000) >> 17)
+#define FORTH_INDEX(vaddr)  (((vaddr) & 0x0001f000) >> 12)
+
 #define AS_READABLE 0x4
 #define AS_WRITEABLE 0x2
 #define AS_EXECUTABLE 0x1

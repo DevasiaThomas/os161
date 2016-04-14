@@ -13,6 +13,7 @@
 #include <vm.h>
 
 struct spinlock splk_coremap;
+struct spinlock splk_tlb;
 unsigned num_allocated_pages = 0;
 unsigned num_total_pages = 0;
 struct coremap_entry *coremap;
@@ -47,6 +48,8 @@ vm_bootstrap()
         coremap[i] = en;
     }
     vm_bootstrapped = true;
+
+    spinlock_init(&splk_tlb);
 }
 
 static
@@ -66,7 +69,7 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
             i = num_fixed + 1;
             continue;
         }
-        if(coremap[i].page_state == PS_FREE || coremap[i].page_state == PS_CLEAN || coremap[i].page_state == PS_DIRTY) {
+        if(coremap[i].page_state == PS_FREE) { //|| coremap[i].page_state == PS_CLEAN || coremap[i].page_state == PS_DIRTY) {
             bool available = true;
             for(unsigned j = i; j < i + npages; j++) {
                 if(coremap[j].page_state == PS_FIXED
@@ -94,11 +97,12 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
     for(unsigned j = start_index; j < start_index + npages; j++) {
         coremap[j].page_state = (as == NULL)?PS_FIXED:PS_VICTIM;
         coremap[j].block_size = npages;
-        coremap[j].vaddr = (as==NULL)?PADDR_TO_KVADDR(pa):vaddr;
+        coremap[j].vaddr = (as==NULL)?PADDR_TO_KVADDR(pa):(vaddr & PAGE_FRAME);
         coremap[j].as = as;
     }
 
-    bzero((void *)coremap[start_index].vaddr, npages*PAGE_SIZE);
+    bzero((void *)PADDR_TO_KVADDR(pa), npages*PAGE_SIZE);
+
     return pa;
 }
 
@@ -165,11 +169,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         return EFAULT;
     }
 
+    faultaddress &= PAGE_FRAME;
+
     //check if valid address
-    int permission = 0;
-    int err = check_if_valid(faultaddress,as,&permission);
-    if(err) {
-        return err;
+    int permission = AS_WRITEABLE;
+    bool valid = check_if_valid(faultaddress,as,&permission);
+    if(!valid) {
+        return EFAULT;
     }
 
     switch(faulttype) {
@@ -203,16 +209,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
     }
 
+    spinlock_acquire(&splk_tlb);
     int spl = splhigh();
     uint32_t ehi = faultaddress;
-    uint32_t elo;
+    uint32_t elo = pte->paddr | TLBLO_VALID;
 
     if((permission & AS_WRITEABLE) == AS_WRITEABLE) {
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
         elo = pte->paddr | TLBLO_DIRTY | TLBLO_VALID;
-    }
-    else {
-        elo = pte->paddr | TLBLO_VALID;
     }
 
     int index = tlb_probe(ehi,0);
@@ -223,6 +227,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         tlb_random(ehi,elo);
     }
     splx(spl);
+    spinlock_release(&splk_tlb);
 
 
     return 0;
@@ -233,17 +238,17 @@ check_if_valid(vaddr_t vaddr, struct addrspace *as,int *permission)
 {
     struct region_entry *t_reg = as->regions;
     while(t_reg) {
-        if(vaddr >= t_reg->reg_base && vaddr < t_reg->reg_base + t_reg->bounds) {
+        if(vaddr >= t_reg->reg_base && vaddr <= t_reg->reg_base + t_reg->bounds) {
             *permission = t_reg->original_permissions;
             return true;
         }
         t_reg = t_reg->next;
     }
-    if(vaddr >= as->heap_start && vaddr < as->heap_end) {
+    if(vaddr >= as->heap_start && vaddr <= as->heap_end) {
         *permission = AS_READABLE | AS_WRITEABLE;
         return true;
     }
-    if(vaddr >= USERSTACKBASE && vaddr < USERSTACK) {
+    if(vaddr >= USERSTACKBASE && vaddr <= USERSTACK) {
         *permission = AS_READABLE | AS_WRITEABLE;
         return true;
     }

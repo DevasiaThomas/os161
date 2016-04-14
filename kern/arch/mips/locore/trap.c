@@ -113,8 +113,9 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
     (void)epc;
     (void)code;
     (void)vaddr;
+
     struct proc* cur = curproc;
-	struct process_descriptor *pdesc = process_table[curproc->pid];
+    struct process_descriptor *pdesc = process_table[curproc->pid];
 	if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
 		proc_destroy(cur);
 		destroy_pdesc(pdesc);
