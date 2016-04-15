@@ -645,8 +645,9 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
     if(index > 0) {
         tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
     }
-    kfree(prev->next);
+    struct page_table_entry *temp = prev->next;
     prev->next = prev->next->next;
+    kfree(temp);
 }
 
 void
