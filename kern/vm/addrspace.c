@@ -43,36 +43,39 @@
  */
 
 /*
-static
-void
-free_page_table(struct page_table_entry *pte) {
-    if(pte == NULL) {
-        return;
-    }
-    struct page_table_entry *t_pte = pte;
-    while(t_pte != NULL) {
-        struct page_table_entry *temp = t_pte->next;
-        kfree(t_pte);
-        t_pte = temp;
-    }
-    return;
-
-}
 */
 
 int copy_page_table(struct addrspace *, struct addrspace *newas);
-void free_list(struct region_entry*);
-void free_page_table(struct page_table_entry *****);
+void free_list(struct region_entry**);
+void free_page_table(struct page_table_entry **);
 int copy_regions(struct addrspace *, struct region_entry **);
+
+void
+free_page_table(struct page_table_entry **pte) {
+    if(pte == NULL) {
+        return;
+    }
+    struct page_table_entry *t_pte = *pte;
+    while(t_pte != NULL) {
+        struct page_table_entry *temp = t_pte->next;
+	page_free(t_pte->paddr);
+        kfree(t_pte);
+        t_pte = temp;
+    }
+    *pte = NULL;
+    return;
+
+}
+
 
 int
 copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 {
-/*  multi-level page table */
+/*  multi-level page table 
     struct page_table_entry *****old_page_table = old_as->page_table;
     struct page_table_entry *****new_page_table = new_as->page_table;
 
-    spinlock_acquire(&splk_copy);
+    //spinlock_acquire(&splk_copy);
     for(int i=0; i < 256; i++) {
         if(old_page_table[i] != NULL) {
             new_page_table[i] = kmalloc(256*sizeof(struct page_table_entry ***));
@@ -129,12 +132,12 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
             new_page_table[i] = NULL;
         }
     }
-    spinlock_release(&splk_copy);
+    //spinlock_release(&splk_copy);
 
-    return 0;
+    return 0;*/
 //  linked list implementation
 
-/*    struct page_table_entry *t_oldpte = old_as->page_table;
+    struct page_table_entry *t_oldpte = old_as->page_table;
 
     if(t_oldpte == NULL) {
         new_as->page_table = NULL;
@@ -151,7 +154,18 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         if(head == false) {
             head = true;
             t_newpte->vaddr = t_oldpte->vaddr;
-            t_newpte->paddr = 0;
+            if(t_oldpte->paddr != 0) {
+		t_newpte->paddr = page_alloc(1,t_newpte->vaddr,new_as);
+                if(t_newpte->paddr == 0) {
+                	return ENOMEM;
+                }
+                memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                coremap[t_newpte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+
+	    }
+	    else {
+		t_newpte->paddr = 0;
+	    }
             t_newpte->next = NULL;
             new_as->page_table = t_newpte;
             t_oldpte = t_oldpte->next;
@@ -159,12 +173,23 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         else {
             struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
             if(temp == NULL) {
-                free_page_table(new_as->page_table);
+                free_page_table(&new_as->page_table);
                 return ENOMEM;
             }
             temp->vaddr = t_oldpte->vaddr;
-            temp->paddr = t_oldpte->paddr;
-            temp->next = NULL;
+            if(t_oldpte->paddr != 0) {
+		temp->paddr = page_alloc(1,t_newpte->vaddr,new_as);
+                if(temp->paddr == 0) {
+                	return ENOMEM;
+                }
+                memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                coremap[temp->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+
+	    }
+	    else {
+		temp->paddr = 0;
+	    }
+	    temp->next = NULL;
             t_newpte->next = temp;
             t_newpte = temp;
             t_oldpte = t_oldpte->next;
@@ -172,20 +197,21 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
     } while(t_oldpte);
 
     //(void)as;
-    return 0;*/
+    return 0;
 }
 
 void
-free_list(struct region_entry *reg_list) {
+free_list(struct region_entry **reg_list) {
     if(reg_list == NULL) {
         return;
     }
-    struct region_entry *t_reg = reg_list;
+    struct region_entry *t_reg = *reg_list;
     while(t_reg != NULL) {
         struct region_entry *temp = t_reg->next;
         kfree(t_reg);
         t_reg = temp;
     }
+    *reg_list = NULL;
     return;
 }
 
@@ -222,7 +248,7 @@ copy_regions(struct addrspace *old_as, struct region_entry **newreg)
         else {
             struct region_entry *temp = kmalloc(sizeof(struct region_entry));
             if(temp == NULL) {
-                free_list(head);
+                free_list(&head);
                 return ENOMEM;
             }
             temp->reg_base = t_oldreg->reg_base;
@@ -241,6 +267,7 @@ copy_regions(struct addrspace *old_as, struct region_entry **newreg)
 
 }
 
+/*
 void
 free_page_table(struct page_table_entry *****page_table)
 {
@@ -268,9 +295,12 @@ free_page_table(struct page_table_entry *****page_table)
             kfree(page_table[i]);
         }
     }
+
+
     kfree(page_table);
     return;
 }
+*/
 
 struct addrspace *
 as_create(void)
@@ -285,14 +315,14 @@ as_create(void)
     as->heap_start = 0;
     as->heap_end = 0;
     as->regions = NULL;
-    as->page_table = kmalloc(256*sizeof(struct page_table_entry ****));
-    if(as->page_table == NULL) {
-         return NULL;
-    }
-    for(int i=0;i<256;i++) {
-         as->page_table[i] = NULL;
-    }
-    //as->page_table = NULL;
+    //as->page_table = kmalloc(256*sizeof(struct page_table_entry ****));
+    //if(as->page_table == NULL) {
+    //     return NULL;
+    //}
+    //for(int i=0;i<256;i++) {
+    //     as->page_table[i] = NULL;
+    //}
+    as->page_table = NULL;
     as->stack_end = USERSTACK;
 
 	/*
@@ -319,7 +349,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
     err = copy_regions(old, &newas->regions);
     if(err) {
-        free_page_table(newas->page_table);
+        free_page_table(&newas->page_table);
         newas->page_table = NULL;
         return err;
     }
@@ -338,9 +368,9 @@ as_destroy(struct addrspace *as)
 	 * Clean up as needed.
 	 */
     if(as) {
-        free_page_table(as->page_table);
+        free_page_table(&as->page_table);
         //free_list(as->page_table);
-        free_list(as->regions);
+        free_list(&as->regions);
     }
 	kfree(as);
 }
@@ -446,7 +476,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 struct page_table_entry*
 get_pte(struct addrspace *as,const vaddr_t faultaddress) {
-    /* 4-level page table implementation */
+    /* 4-level page table implementation 
     int top_index = TOP_INDEX(faultaddress);
     if(as->page_table[top_index] == NULL)
         return NULL;
@@ -464,26 +494,26 @@ get_pte(struct addrspace *as,const vaddr_t faultaddress) {
         return NULL;
 
     return as->page_table[top_index][second_index][third_index][forth_index];
-
+*/
     //linked list
 
     //vaddr = vaddr & PAGE_FRAME;
-    /*
+    
     struct page_table_entry *t_pte = as->page_table;
     while(t_pte) {
-        if(t_pte->vaddr == vaddr) {
+        if(t_pte->vaddr == faultaddress) {
             return t_pte;
         }
         t_pte = t_pte->next;
     }
-    return NULL;*/
+    return NULL;
 
 }
 
 struct page_table_entry*
 add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
 {
-//    4-level page table implementation
+/*    4-level page table implementation
 
     // top level
     int top_index = TOP_INDEX(vaddr);
@@ -534,9 +564,9 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     temp->paddr = paddr;
     as->page_table[top_index][second_index][third_index][forth_index] = temp;
 
-    return temp;
+    return temp; */
 //    linked list implementation
-/*    struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
+    struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
     if(temp == NULL) {
         return NULL;
     }
@@ -554,7 +584,7 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
     t_pte->next = temp;
 
-    return temp;*/
+    return temp;
 }
 
 struct region_entry *

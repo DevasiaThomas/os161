@@ -273,16 +273,22 @@ check_if_valid(vaddr_t vaddr, struct addrspace *as,int *permission)
 void
 debug_vm(void)
 {
+    int nfree = 0;
     kprintf("\nleaking pages: ");
     for(unsigned i=num_fixed+1;i<num_total_pages;i++) {
         if(coremap[i].page_state != PS_FREE) {
             kprintf("%u ",i);
         }
+	else {
+		nfree++;
+	}
     }
-    kprintf("\nfreed Fixed pages: ");
+/*
+    kprintf("\n ");
     for(unsigned i = 0; i <= num_fixed; i++) {
         if(coremap[i].page_state == PS_FREE) {
             kprintf("%u ",i);
         }
     }
+*/
 }

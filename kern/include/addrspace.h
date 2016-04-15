@@ -52,7 +52,7 @@ struct vnode;
 struct page_table_entry{
     vaddr_t vaddr;
     paddr_t paddr;
-    //struct page_table_entry * next;
+    struct page_table_entry * next;
 };
 
 
@@ -81,7 +81,7 @@ struct addrspace {
         size_t as_npages2;
         paddr_t as_stackpbase;
 #else
-        struct page_table_entry *****page_table;
+        struct page_table_entry *page_table;
         struct region_entry* regions;
         vaddr_t heap_start;
         vaddr_t heap_end;
