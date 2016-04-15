@@ -72,35 +72,39 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
     struct page_table_entry *****old_page_table = old_as->page_table;
     struct page_table_entry *****new_page_table = new_as->page_table;
 
-    spinlock_acquire(&splk_copy);
     for(int i=0; i < 256; i++) {
         if(old_page_table[i] != NULL) {
             new_page_table[i] = kmalloc(256*sizeof(struct page_table_entry ***));
             if(new_page_table[i] == NULL) {
+                free_page_table(new_as->page_table);
                 return ENOMEM;
             }
             for(int j = 0; j < 256; j++) {
                 if(old_page_table[i][j] != NULL) {
                     new_page_table[i][j] = kmalloc(256*sizeof(struct page_table_entry **));
                     if(new_page_table[i][j] == NULL) {
+                        free_page_table(new_as->page_table);
                         return ENOMEM;
                     }
                     for(int k=0; k < 256; k++) {
                         if(old_page_table[i][j][k] != NULL) {
                             new_page_table[i][j][k] = kmalloc(256*sizeof(struct page_table_entry *));
                             if(new_page_table[i][j][k] == NULL) {
+                                free_page_table(new_as->page_table);
                                 return ENOMEM;
                             }
                             for(int l=0; l < 256; l++) {
                                 if(old_page_table[i][j][k][l] != NULL) {
                                     new_page_table[i][j][k][l] = kmalloc(sizeof(struct page_table_entry));
                                     if(new_page_table[i][j][k][l] == NULL) {
+                                        free_page_table(new_as->page_table);
                                         return ENOMEM;
                                     }
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
                                         new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_as);
                                         if(new_page_table[i][j][k][l] == 0) {
+                                            free_page_table(new_as->page_table);
                                             return ENOMEM;
                                         }
                                         memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
@@ -129,7 +133,6 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
             new_page_table[i] = NULL;
         }
     }
-    spinlock_release(&splk_copy);
 
     return 0;
 //  linked list implementation

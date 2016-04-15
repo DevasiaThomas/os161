@@ -13,8 +13,6 @@
 #include <vm.h>
 
 struct spinlock splk_coremap;
-struct spinlock splk_tlb;
-struct spinlock splk_copy;
 unsigned num_allocated_pages = 0;
 unsigned num_total_pages = 0;
 struct coremap_entry *coremap;
@@ -50,8 +48,6 @@ vm_bootstrap()
     }
     vm_bootstrapped = true;
 
-    spinlock_init(&splk_tlb);
-    spinlock_init(&splk_copy);
 }
 
 paddr_t
@@ -116,6 +112,7 @@ page_free(paddr_t paddr)
     coremap[index].block_size = 0;
     coremap[index].vaddr = 0;
     coremap[index].as = NULL;
+    num_allocated_pages -= 1;
     spinlock_release(&splk_coremap);
 }
 
@@ -222,7 +219,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
     }
 
-    spinlock_acquire(&splk_tlb);
     int spl = splhigh();
     uint32_t ehi = faultaddress;
     uint32_t elo = pte->paddr | TLBLO_VALID;
@@ -240,7 +236,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         tlb_random(ehi,elo);
     }
     splx(spl);
-    spinlock_release(&splk_tlb);
 
 
     return 0;
@@ -251,17 +246,17 @@ check_if_valid(vaddr_t vaddr, struct addrspace *as,int *permission)
 {
     struct region_entry *t_reg = as->regions;
     while(t_reg) {
-        if(vaddr >= t_reg->reg_base && vaddr <= t_reg->reg_base + t_reg->bounds) {
+        if(vaddr >= t_reg->reg_base && vaddr < t_reg->reg_base + t_reg->bounds) {
             *permission = t_reg->original_permissions;
             return true;
         }
         t_reg = t_reg->next;
     }
-    if(vaddr >= as->heap_start && vaddr <= as->heap_end) {
+    if(vaddr >= as->heap_start && vaddr < as->heap_end) {
         *permission = AS_READABLE | AS_WRITEABLE;
         return true;
     }
-    if(vaddr >= USERSTACKBASE && vaddr <= USERSTACK) {
+    if(vaddr >= USERSTACKTOP && vaddr < USERSTACK) {
         *permission = AS_READABLE | AS_WRITEABLE;
         return true;
     }

@@ -71,7 +71,6 @@ struct coremap_entry {
 
 extern struct coremap_entry *coremap;
 extern struct spinlock splk_coremap;
-extern struct spinlock splk_copy;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
 

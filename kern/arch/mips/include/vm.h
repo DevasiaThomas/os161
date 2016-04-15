@@ -82,7 +82,7 @@
  * grows downwards.
  */
 #define USERSTACK     USERSPACETOP
-#define USERSTACKBASE USERSTACK - 8*1024*1024
+#define USERSTACKTOP USERSTACK - 8*1024*1024
 /*
  * Interface to the low-level module that looks after the amount of
  * physical memory we have.

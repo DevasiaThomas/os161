@@ -34,10 +34,12 @@ sys_fork(struct trapframe *tf, pid_t *ret_pid)
     int err = 0;
     struct proc *child_proc = proc_fork("child",&err);
     if(err) {
+        kfree(child_tf);
         return err;
     }
     err = thread_fork("child", child_proc, childproc_init, child_tf, 0);
     if(err) {
+        kfree(child_tf);
          return err;
     }
 
@@ -311,3 +313,27 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 	return 0;
 }
 
+int
+sys_sbrk(intptr_t amount, int *retval)
+{
+    if(amount >= 0) {
+        if((vaddr_t)amount <= USERSTACKTOP - curproc->p_addrspace->heap_end) {
+            *retval = curproc->p_addrspace->heap_end;
+            curproc->p_addrspace->heap_end += amount;
+            return 0;
+        }
+        else {
+            *retval = -1;
+            return ENOMEM;
+        }
+    }
+    else if(curproc->p_addrspace->heap_end + (vaddr_t)amount >= curproc->p_addrspace->heap_start) {
+        *retval = curproc->p_addrspace->heap_end;
+        curproc->p_addrspace->heap_end += amount;
+        return 0;
+    }
+    else {
+        *retval = -1;
+        return EINVAL;
+    }
+}

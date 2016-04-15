@@ -149,7 +149,7 @@ syscall(struct trapframe *tf)
 			if(!err){
 				tf->tf_v1 = (int32_t)(new_pos & 0xFFFFFFFF);
 			}
-			
+
 		}
         break;
 
@@ -204,6 +204,14 @@ syscall(struct trapframe *tf)
         case SYS_getpid:
         {
             retval = (int32_t)curproc->pid;
+            break;
+        }
+
+        case SYS_sbrk:
+        {
+            int ret;
+            err = sys_sbrk(tf->tf_a0,&ret);
+            retval = (int32_t)ret;
             break;
         }
 
