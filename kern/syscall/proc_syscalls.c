@@ -318,7 +318,7 @@ sys_sbrk(intptr_t amount, int *retval)
 {
     struct addrspace *as = proc_getas();
     if(amount >= 0) {
-        if((vaddr_t)amount <= USERSTACKTOP - as->heap_end) {
+        if((vaddr_t)amount <= USERSTACKBASE - as->heap_end) {
             *retval = as->heap_end;
             as->heap_end += amount;
             return 0;
