@@ -157,6 +157,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
             if(t_oldpte->paddr != 0) {
 		t_newpte->paddr = page_alloc(1,t_newpte->vaddr,new_as);
                 if(t_newpte->paddr == 0) {
+			kfree(t_newpte);
                 	return ENOMEM;
                 }
                 memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
@@ -173,13 +174,14 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         else {
             struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
             if(temp == NULL) {
-                free_page_table(&new_as->page_table);
+             //   free_page_table(&new_as->page_table);
                 return ENOMEM;
             }
             temp->vaddr = t_oldpte->vaddr;
             if(t_oldpte->paddr != 0) {
 		temp->paddr = page_alloc(1,t_newpte->vaddr,new_as);
                 if(temp->paddr == 0) {
+			kfree(temp);
                 	return ENOMEM;
                 }
                 memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
@@ -196,7 +198,10 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         }
     } while(t_oldpte);
 
-    //(void)as;
+//	(void)old_as;
+//	(void)new_as;
+//	return ENOMEM;
+    
     return 0;
 }
 
@@ -344,13 +349,15 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
     int err = copy_page_table(old, newas);
     if(err) {
+	 as_destroy(newas);	 
          return err;
     }
 
     err = copy_regions(old, &newas->regions);
     if(err) {
-        free_page_table(&newas->page_table);
-        newas->page_table = NULL;
+        //free_page_table(&newas->page_table);
+        //newas->page_table = NULL;
+	as_destroy(newas);
         return err;
     }
     newas->heap_start = old->heap_start;

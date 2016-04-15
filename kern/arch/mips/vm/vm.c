@@ -116,6 +116,7 @@ page_free(paddr_t paddr)
     coremap[index].block_size = 0;
     coremap[index].vaddr = 0;
     coremap[index].as = NULL;
+    num_allocated_pages--;
     spinlock_release(&splk_coremap);
 }
 
