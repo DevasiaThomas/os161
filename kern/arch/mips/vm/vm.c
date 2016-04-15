@@ -106,14 +106,16 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
 void
 page_free(paddr_t paddr)
 {
-    spinlock_acquire(&splk_coremap);
-    unsigned index = paddr/PAGE_SIZE;
-    coremap[index].page_state = PS_FREE;
-    coremap[index].block_size = 0;
-    coremap[index].vaddr = 0;
-    coremap[index].as = NULL;
-    num_allocated_pages -= 1;
-    spinlock_release(&splk_coremap);
+    if(paddr != 0) {
+        spinlock_acquire(&splk_coremap);
+        unsigned index = paddr/PAGE_SIZE;
+        coremap[index].page_state = PS_FREE;
+        coremap[index].block_size = 0;
+        coremap[index].vaddr = 0;
+        coremap[index].as = NULL;
+        num_allocated_pages -= 1;
+        spinlock_release(&splk_coremap);
+    }
 }
 
 vaddr_t

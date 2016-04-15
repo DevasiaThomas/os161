@@ -150,6 +150,7 @@ struct page_table_entry* add_pte(struct addrspace *as, vaddr_t vaddr, paddr_t pa
 struct page_table_entry* get_pte(struct addrspace *as, const vaddr_t faultaddress);
 struct region_entry* add_region(struct addrspace *as, vaddr_t base, size_t sz, int readable, int writeable, int executable);
 
+void free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr);
 /*
  * Functions in loadelf.c
  *    load_elf - load an ELF user program executable into the current

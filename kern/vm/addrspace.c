@@ -64,6 +64,7 @@ int copy_page_table(struct addrspace *, struct addrspace *newas);
 void free_list(struct region_entry*);
 void free_page_table(struct page_table_entry *****);
 int copy_regions(struct addrspace *, struct region_entry **);
+void free_pte(struct addrspace *,vaddr_t vaddr);
 
 int
 copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
@@ -76,35 +77,36 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         if(old_page_table[i] != NULL) {
             new_page_table[i] = kmalloc(256*sizeof(struct page_table_entry ***));
             if(new_page_table[i] == NULL) {
-                free_page_table(new_as->page_table);
+                //free_page_table(new_as->page_table);
                 return ENOMEM;
             }
             for(int j = 0; j < 256; j++) {
                 if(old_page_table[i][j] != NULL) {
                     new_page_table[i][j] = kmalloc(256*sizeof(struct page_table_entry **));
                     if(new_page_table[i][j] == NULL) {
-                        free_page_table(new_as->page_table);
+                        //free_page_table(new_as->page_table);
                         return ENOMEM;
                     }
                     for(int k=0; k < 256; k++) {
                         if(old_page_table[i][j][k] != NULL) {
                             new_page_table[i][j][k] = kmalloc(256*sizeof(struct page_table_entry *));
                             if(new_page_table[i][j][k] == NULL) {
-                                free_page_table(new_as->page_table);
+                                //free_page_table(new_as->page_table);
                                 return ENOMEM;
                             }
                             for(int l=0; l < 256; l++) {
                                 if(old_page_table[i][j][k][l] != NULL) {
                                     new_page_table[i][j][k][l] = kmalloc(sizeof(struct page_table_entry));
                                     if(new_page_table[i][j][k][l] == NULL) {
-                                        free_page_table(new_as->page_table);
+                                        //free_page_table(new_as->page_table);
                                         return ENOMEM;
                                     }
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
                                         new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_as);
                                         if(new_page_table[i][j][k][l] == 0) {
-                                            free_page_table(new_as->page_table);
+                                            kfree(new_page_table[i][j][k][l]);
+                                            new_page_table[i][j][k][l]=NULL;
                                             return ENOMEM;
                                         }
                                         memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
@@ -317,13 +319,13 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
     int err = copy_page_table(old, newas);
     if(err) {
+        as_destroy(newas);
          return err;
     }
 
     err = copy_regions(old, &newas->regions);
     if(err) {
-        free_page_table(newas->page_table);
-        newas->page_table = NULL;
+        as_destroy(newas);
         return err;
     }
     newas->heap_start = old->heap_start;
@@ -342,6 +344,7 @@ as_destroy(struct addrspace *as)
 	 */
     if(as) {
         free_page_table(as->page_table);
+        as->page_table = NULL;
         //free_list(as->page_table);
         free_list(as->regions);
     }
@@ -584,4 +587,47 @@ add_region(struct addrspace *as, vaddr_t base, size_t memsize, int r, int w, int
     t_reg->next = temp;
 
     return temp;
+}
+
+void
+free_pte(struct addrspace *as, vaddr_t vaddr)
+{
+    int top_index = TOP_INDEX(vaddr);
+    if(as->page_table[top_index] == NULL)
+        return;
+
+    int second_index = SECOND_INDEX(vaddr);
+    if(as->page_table[top_index][second_index] == NULL)
+        return;
+
+    int third_index = THIRD_INDEX(vaddr);
+    if(as->page_table[top_index][second_index][third_index] == NULL)
+        return;
+
+    int forth_index = FORTH_INDEX(vaddr);
+    if(as->page_table[top_index][second_index][third_index][forth_index] == NULL)
+        return;
+
+    page_free(as->page_table[top_index][second_index][third_index][forth_index]->paddr);
+    as->page_table[top_index][second_index][third_index][forth_index]->paddr = 0;
+    as->page_table[top_index][second_index][third_index][forth_index]->vaddr = 0;
+    kfree(as->page_table[top_index][second_index][third_index][forth_index]);
+    as->page_table[top_index][second_index][third_index][forth_index] = NULL;
+
+}
+
+void
+free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr)
+{
+    for(unsigned i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
+        free_pte(as,i);
+        /*struct page_table_entry *pte = get_pte(as, i);
+        if(pte == NULL) {
+            continue;
+        }
+        ipage_free(pte->paddr);
+        pte->paddr = 0;
+        pte->vaddr = 0;
+        kfree(pte);*/
+    }
 }

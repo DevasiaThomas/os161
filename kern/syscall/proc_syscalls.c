@@ -316,10 +316,11 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 int
 sys_sbrk(intptr_t amount, int *retval)
 {
+    struct addrspace *as = proc_getas();
     if(amount >= 0) {
-        if((vaddr_t)amount <= USERSTACKTOP - curproc->p_addrspace->heap_end) {
-            *retval = curproc->p_addrspace->heap_end;
-            curproc->p_addrspace->heap_end += amount;
+        if((vaddr_t)amount <= USERSTACKTOP - as->heap_end) {
+            *retval = as->heap_end;
+            as->heap_end += amount;
             return 0;
         }
         else {
@@ -327,9 +328,10 @@ sys_sbrk(intptr_t amount, int *retval)
             return ENOMEM;
         }
     }
-    else if(curproc->p_addrspace->heap_end + (vaddr_t)amount >= curproc->p_addrspace->heap_start) {
-        *retval = curproc->p_addrspace->heap_end;
-        curproc->p_addrspace->heap_end += amount;
+    else if(as->heap_end + (vaddr_t)amount >= as->heap_start) {
+        *retval = as->heap_end;
+        free_pages(as, as->heap_end+amount, as->heap_end);
+        as->heap_end += amount;
         return 0;
     }
     else {

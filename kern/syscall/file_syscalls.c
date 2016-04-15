@@ -83,7 +83,7 @@ sys_open(userptr_t filename, int flags, int mode, int *fd)
                 return EMFILE;
             }
             else {
-                struct file_descriptor *fdesc = kmalloc(sizeof(struct file_descriptor));
+                struct file_descriptor *fdesc =kmalloc(sizeof(struct file_descriptor));
                 if (fdesc == NULL) {
     //                kfree(buf);
                     return ENOMEM;
