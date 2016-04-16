@@ -257,6 +257,7 @@ proc_destroy(struct proc *proc)
 
 	kfree(proc->p_name);
 	kfree(proc);
+    num_processes--;
 }
 
 //destroy the pdesc created in proc_fork-> Sam03/05

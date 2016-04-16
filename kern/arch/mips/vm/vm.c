@@ -252,17 +252,17 @@ check_if_valid(vaddr_t vaddr, struct addrspace *as,int *permission)
 {
     struct region_entry *t_reg = as->regions;
     while(t_reg) {
-        if(vaddr >= t_reg->reg_base && vaddr <= t_reg->reg_base + t_reg->bounds) {
+        if(vaddr >= t_reg->reg_base && vaddr < t_reg->reg_base + t_reg->bounds) {
             *permission = t_reg->original_permissions;
             return true;
         }
         t_reg = t_reg->next;
     }
-    if(vaddr >= as->heap_start && vaddr <= as->heap_end) {
+    if(vaddr >= as->heap_start && vaddr < as->heap_end) {
         *permission = AS_READABLE | AS_WRITEABLE;
         return true;
     }
-    if(vaddr >= USERSTACKBASE && vaddr <= USERSTACK) {
+    if(vaddr >= USERSTACKBASE && vaddr < USERSTACK) {
         *permission = AS_READABLE | AS_WRITEABLE;
         return true;
     }

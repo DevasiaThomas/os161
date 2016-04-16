@@ -328,7 +328,7 @@ sys_sbrk(intptr_t amount, int *retval)
             return ENOMEM;
         }
     }
-    else if(as->heap_end + (vaddr_t)amount >= as->heap_start) {
+    else if((int)as->heap_end - (int)as->heap_start >= (-1)*amount) {
         *retval = as->heap_end;
         free_pages(as, as->heap_end+amount, as->heap_end);
         as->heap_end += amount;
