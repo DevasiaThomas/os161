@@ -37,6 +37,7 @@
  */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <err.h>
 #include <test161/test161.h>
@@ -126,7 +127,11 @@ check(void)
 			errx(1, "Failed: A[%d] is %d, A[%d] is %d",
 			     i, A[i], i+1, A[i+1]);
 		}
+        if(i%10000 == 0) {
+            tprintf(".");
+        }
 	}
+    tprintf("checking complete\n");
 	success(TEST161_SUCCESS, SECRET, "/testbin/sort");
 }
 
@@ -135,6 +140,7 @@ main(void)
 {
 	initarray();
 	sort(A, SIZE);
+    tprintf("sorting complete\n");
 	check();
 	return 0;
 }

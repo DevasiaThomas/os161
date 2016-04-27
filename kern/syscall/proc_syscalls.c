@@ -34,10 +34,12 @@ sys_fork(struct trapframe *tf, pid_t *ret_pid)
     int err = 0;
     struct proc *child_proc = proc_fork("child",&err);
     if(err) {
+        kfree(child_tf);
         return err;
     }
     err = thread_fork("child", child_proc, childproc_init, child_tf, 0);
     if(err) {
+        kfree(child_tf);
          return err;
     }
 
@@ -311,3 +313,29 @@ int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retpid){//sam 0
 	return 0;
 }
 
+int
+sys_sbrk(intptr_t amount, int *retval)
+{
+    struct addrspace *as = proc_getas();
+    if(amount >= 0) {
+        if((vaddr_t)amount <= USERSTACKBASE - as->heap_end) {
+            *retval = as->heap_end;
+            as->heap_end += amount;
+            return 0;
+        }
+        else {
+            *retval = -1;
+            return ENOMEM;
+        }
+    }
+    else if((int)as->heap_end - (int)as->heap_start >= (-1)*amount) {
+        *retval = as->heap_end;
+        free_pages(as, as->heap_end+amount, as->heap_end);
+        as->heap_end += amount;
+        return 0;
+    }
+    else {
+        *retval = -1;
+        return EINVAL;
+    }
+}

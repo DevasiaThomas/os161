@@ -49,6 +49,7 @@ int copy_page_table(struct addrspace *, struct addrspace *newas);
 void free_list(struct region_entry**);
 void free_page_table(struct page_table_entry **);
 int copy_regions(struct addrspace *, struct region_entry **);
+void free_pte(struct addrspace *as, vaddr_t vaddr);
 
 void
 free_page_table(struct page_table_entry **pte) {
@@ -58,7 +59,7 @@ free_page_table(struct page_table_entry **pte) {
     struct page_table_entry *t_pte = *pte;
     while(t_pte != NULL) {
         struct page_table_entry *temp = t_pte->next;
-	page_free(t_pte->paddr);
+	page_free(t_pte);
         kfree(t_pte);
         t_pte = temp;
     }
@@ -71,7 +72,7 @@ free_page_table(struct page_table_entry **pte) {
 int
 copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 {
-/*  multi-level page table 
+/*  multi-level page table
     struct page_table_entry *****old_page_table = old_as->page_table;
     struct page_table_entry *****new_page_table = new_as->page_table;
 
@@ -204,7 +205,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 //	(void)old_as;
 //	(void)new_as;
 //	return ENOMEM;
-    
+
     return 0;
 }
 
@@ -352,7 +353,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
     int err = copy_page_table(old, newas);
     if(err) {
-	 as_destroy(newas);	 
+	 as_destroy(newas);
          return err;
     }
 
@@ -486,7 +487,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 struct page_table_entry*
 get_pte(struct addrspace *as,const vaddr_t faultaddress) {
-    /* 4-level page table implementation 
+    /* 4-level page table implementation
     int top_index = TOP_INDEX(faultaddress);
     if(as->page_table[top_index] == NULL)
         return NULL;
@@ -508,7 +509,7 @@ get_pte(struct addrspace *as,const vaddr_t faultaddress) {
     //linked list
 
     //vaddr = vaddr & PAGE_FRAME;
-    
+
     struct page_table_entry *t_pte = as->page_table;
     while(t_pte) {
         if(t_pte->vaddr == faultaddress) {
@@ -582,6 +583,9 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
     temp->vaddr = vaddr & PAGE_FRAME;
     temp->paddr = paddr;
+    temp->on_disk = false;
+    temp->locked = false;
+    temp->swap_index = -1;
     temp->next = NULL;
     if(as->page_table == NULL) {
         as->page_table = temp;
@@ -621,4 +625,41 @@ add_region(struct addrspace *as, vaddr_t base, size_t memsize, int r, int w, int
     t_reg->next = temp;
 
     return temp;
+}
+
+void
+free_pte(struct addrspace *as, vaddr_t vaddr)
+{
+    struct page_table_entry *t_pte = as->page_table;
+    if(t_pte->vaddr == vaddr) {
+        page_free(t_pte);
+        t_pte->vaddr = t_pte->next->vaddr;
+        t_pte->paddr = t_pte->next->paddr;
+        t_pte->next = t_pte->next->next;
+    }
+
+    struct page_table_entry *prev = t_pte;
+    while(prev->next != NULL && prev->next->vaddr != vaddr) {
+        prev = prev->next;
+    }
+
+    if(prev->next == NULL) {
+        return;
+    }
+    page_free(prev->next);
+    int index = tlb_probe(vaddr,0);
+    if(index > 0) {
+        tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
+    }
+    struct page_table_entry *temp = prev->next;
+    prev->next = prev->next->next;
+    kfree(temp);
+}
+
+void
+free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr)
+{
+    for(vaddr_t i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
+        free_pte(as,i);
+    }
 }

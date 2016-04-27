@@ -46,6 +46,7 @@
 #include <threadprivate.h>
 #include <proc.h>
 #include <current.h>
+#include <mips/tlb.h>
 #include <synch.h>
 #include <addrspace.h>
 #include <mainbus.h>
@@ -1178,6 +1179,24 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 }
 
 void
+tlbshootdown(struct addrspace *as, vaddr_t vaddr) {
+    struct cpu *cpu;
+    struct tlbshootdown tlbshootdown_temp;
+    tlbshootdown_temp.ts_as = as;
+    tlbshootdown_temp.ts_vaddr = vaddr;
+
+    unsigned n_cpu = cpuarray_num(&allcpus);
+    for(unsigned i = 0; i < n_cpu; i++) {
+        cpu = cpuarray_get(&allcpus,i);
+        if(cpu != curcpu->c_self)
+            ipi_tlbshootdown(cpu ,&tlbshootdown_temp);
+        else {
+            vm_tlbshootdown(&tlbshootdown_temp);
+        }
+    }
+}
+
+void
 interprocessor_interrupt(void)
 {
 	uint32_t bits;
@@ -1234,4 +1253,9 @@ void thread_wait_for_count(unsigned tc)
 		wchan_sleep(thread_count_wchan, &thread_count_lock);
 	}
 	spinlock_release(&thread_count_lock);
+}
+
+int get_cpunum()
+{
+	return cpuarray_num(&allcpus);
 }

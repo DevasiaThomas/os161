@@ -38,6 +38,7 @@
 
 
 #include <machine/vm.h>
+#include <limits.h>
 
 /* Fault-type arguments to vm_fault() */
 #define VM_FAULT_READ        0    /* A read was attempted */
@@ -54,6 +55,8 @@
 /* Initialization function */
 void vm_bootstrap(void);
 
+void swap_bootstrap(void);
+
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
 
@@ -63,23 +66,33 @@ bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
 /* coremap_entry */
 
 struct coremap_entry {
+    bool recent:1;
     unsigned page_state;
     unsigned block_size;
     vaddr_t vaddr;
     struct addrspace *as;
+    struct bitmap *cpumap;
 };
 
 extern struct coremap_entry *coremap;
 extern struct spinlock splk_coremap;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
+extern struct vnode *swap_disk;
+extern bool swap_enable;
+extern struct bitmap *swapmap;
+extern struct lock *lock_pte;
+extern struct lock *lock_swap;
+extern struct cv *cv_pte;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
-paddr_t page_alloc(unsigned npages, vaddr_t vaddr, struct addrspace *as);
-void page_free(paddr_t paddr);
+/* swapping functions */
+int page_evict(unsigned index,int page_state);
+
+
 /*
  * Return amount of memory (in bytes) used by allocated coremap pages.  If
  * there are ongoing allocations, this value could change after it is returned

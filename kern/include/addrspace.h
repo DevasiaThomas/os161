@@ -50,6 +50,9 @@
 struct vnode;
 
 struct page_table_entry{
+    bool on_disk:1;
+    bool locked:1;
+    int swap_index;
     vaddr_t vaddr;
     paddr_t paddr;
     struct page_table_entry * next;
@@ -62,7 +65,6 @@ struct region_entry{
     int original_permissions;
     int temp_permissions; //only for loadelf
     struct region_entry *next;
-
 };
 /*
  * Address space - data structure associated with the virtual memory
@@ -86,7 +88,6 @@ struct addrspace {
         vaddr_t heap_start;
         vaddr_t heap_end;
         vaddr_t stack_end;
-        struct wchan *swap_wc;
 #endif
 };
 
@@ -150,6 +151,7 @@ struct page_table_entry* add_pte(struct addrspace *as, vaddr_t vaddr, paddr_t pa
 struct page_table_entry* get_pte(struct addrspace *as, const vaddr_t faultaddress);
 struct region_entry* add_region(struct addrspace *as, vaddr_t base, size_t sz, int readable, int writeable, int executable);
 
+void free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr);
 /*
  * Functions in loadelf.c
  *    load_elf - load an ELF user program executable into the current
@@ -158,6 +160,12 @@ struct region_entry* add_region(struct addrspace *as, vaddr_t base, size_t sz, i
  */
 
 int load_elf(struct vnode *v, vaddr_t *entrypoint);
+
+paddr_t page_alloc(unsigned npages, vaddr_t vaddr, struct addrspace *as);
+void page_free(struct page_table_entry *);
+
+int swap_in(struct page_table_entry *pte);
+int swap_out(struct page_table_entry *pte);
 
 
 #endif /* _ADDRSPACE_H_ */
