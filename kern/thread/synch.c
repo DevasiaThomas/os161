@@ -189,12 +189,12 @@ lock_acquire(struct lock *lock)
 	KASSERT(curthread->t_in_interrupt == false);
 
 	spinlock_acquire(&lock->lk_lock);
-	if(lock->thread_with_lock == curthread)
-	{
+	//if(lock->thread_with_lock == curthread)
+	//{
 		//lock->thread_with_lock = curthread;
-		spinlock_release(&lock->lk_lock);
-		return;
-	}
+	//	spinlock_release(&lock->lk_lock);
+	//	return;
+	//}
 
 	while(lock->lk_status == true)
 	{

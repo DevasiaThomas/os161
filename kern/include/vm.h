@@ -71,6 +71,7 @@ struct coremap_entry {
     unsigned block_size;
     vaddr_t vaddr;
     struct addrspace *as;
+    struct bitmap *cpumap;
 };
 
 extern struct coremap_entry *coremap;
@@ -79,7 +80,7 @@ extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
 extern struct vnode *swap_disk;
 extern bool swap_enable;
-extern bool swapmap[MAX_SWAP];
+extern struct bitmap *swapmap;
 extern struct lock *lock_pte;
 extern struct lock *lock_swap;
 extern struct cv *cv_pte;
