@@ -59,7 +59,7 @@ free_page_table(struct page_table_entry **pte) {
     struct page_table_entry *t_pte = *pte;
     while(t_pte != NULL) {
         struct page_table_entry *temp = t_pte->next;
-	page_free(t_pte->paddr);
+	page_free(t_pte);
         kfree(t_pte);
         t_pte = temp;
     }
@@ -580,6 +580,9 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
     temp->vaddr = vaddr & PAGE_FRAME;
     temp->paddr = paddr;
+    temp->on_disk = false;
+    temp->locked = false;
+    temp->swap_index = -1;
     temp->next = NULL;
     if(as->page_table == NULL) {
         as->page_table = temp;
@@ -626,7 +629,7 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
 {
     struct page_table_entry *t_pte = as->page_table;
     if(t_pte->vaddr == vaddr) {
-        page_free(t_pte->paddr);
+        page_free(t_pte);
         t_pte->vaddr = t_pte->next->vaddr;
         t_pte->paddr = t_pte->next->paddr;
         t_pte->next = t_pte->next->next;
@@ -640,7 +643,7 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
     if(prev->next == NULL) {
         return;
     }
-    page_free(prev->next->paddr);
+    page_free(prev->next);
     int index = tlb_probe(vaddr,0);
     if(index > 0) {
         tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
