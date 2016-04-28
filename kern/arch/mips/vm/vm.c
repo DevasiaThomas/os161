@@ -33,6 +33,7 @@ struct bitmap *swapmap;
 struct lock *lock_swap;
 struct lock *lock_pte;
 struct cv *cv_pte;
+struct semaphore *sem_tlb;
 int num_swap = 0;
 
 void
@@ -59,6 +60,7 @@ vm_bootstrap()
         en.recent = false;
         en.block_size = 0;
         en.vaddr = 0;
+	en.cpu = -1;
         en.as = NULL;
         coremap[i] = en;
     }
@@ -78,15 +80,11 @@ swap_bootstrap()
         swap_enable = true;
     }
 
-    int num_cpus = get_cpunum();
-    for(unsigned i = 0; i < num_total_pages; i++) {
-	coremap[i].cpumap = bitmap_create(num_cpus);
-    }
-
     swapmap = bitmap_create(MAX_SWAP);
     lock_swap = lock_create("lock_swap");
     lock_pte = lock_create("lock_pte");
     cv_pte = cv_create("cv_pte");
+    sem_tlb = sem_create("sem_tlb",0);
 }
 
 paddr_t
@@ -198,7 +196,7 @@ page_free(struct page_table_entry *pte)
 
     //if page is on the disk, change the status of swapmap for the page to unused
     if(pte->on_disk) {
-        bitmap_unmark(swapmap,pte->swap_index);
+       	bitmap_unmark(swapmap,pte->swap_index); 
 	//swapmap[pte->swap_index] = false;
     }
     else {
@@ -260,6 +258,7 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
             tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
         }
     }
+    V(sem_tlb);
     splx(spl);
     //spinlock_release(&splk_tlb);
 }
@@ -350,9 +349,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     //}
 
     //coremap[pte->paddr/PAGE_SIZE].recent = true;
-    if(!bitmap_isset(coremap[pte->paddr/PAGE_SIZE].cpumap,curcpu->c_number)) {
-	bitmap_mark(coremap[pte->paddr/PAGE_SIZE].cpumap,curcpu->c_number);
-    }
+    coremap[pte->paddr/PAGE_SIZE].cpu = curcpu->c_number;
     int index = tlb_probe(ehi,0);
     if(index > 0) {
         tlb_write(ehi,elo,index);
@@ -428,7 +425,7 @@ page_evict(unsigned index, int page_state)
     evict_pte->locked = true;
     lock_release(lock_pte);
 
-    tlbshootdown(coremap[index].as,coremap[index].vaddr);
+    tlbshootdown(coremap[index].as,coremap[index].vaddr,coremap[index].cpu);
 
     //write the page to disk if the page_state is dirty
     //if(page_state == PS_DIRTY) {

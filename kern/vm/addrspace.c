@@ -197,7 +197,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 	    }
 	    else {
 		temp->paddr = 0;
-		if(swap_enable) {
+		/*if(swap_enable) {
 			char kbuf[4096];
 			//read the old_pte to buffer
 			struct iovec iov;
@@ -213,7 +213,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 				return err;
 			}
 			temp->on_disk = true;
-		}
+		}*/
 	    }
 	    temp->next = NULL;
             t_newpte->next = temp;

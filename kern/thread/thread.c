@@ -1179,20 +1179,19 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 }
 
 void
-tlbshootdown(struct addrspace *as, vaddr_t vaddr) {
+tlbshootdown(struct addrspace *as, vaddr_t vaddr, int cpuid) {
     struct cpu *cpu;
     struct tlbshootdown tlbshootdown_temp;
     tlbshootdown_temp.ts_as = as;
     tlbshootdown_temp.ts_vaddr = vaddr;
-
-    unsigned n_cpu = cpuarray_num(&allcpus);
-    for(unsigned i = 0; i < n_cpu; i++) {
-        cpu = cpuarray_get(&allcpus,i);
-        if(cpu != curcpu->c_self)
-            ipi_tlbshootdown(cpu ,&tlbshootdown_temp);
-        else {
-            vm_tlbshootdown(&tlbshootdown_temp);
-        }
+    cpu = cpuarray_get(&allcpus,cpuid);
+    if(cpu != curcpu->c_self) {
+        ipi_tlbshootdown(cpu ,&tlbshootdown_temp);
+	P(sem_tlb);
+    }
+    else {
+        vm_tlbshootdown(&tlbshootdown_temp);
+	P(sem_tlb);
     }
 }
 

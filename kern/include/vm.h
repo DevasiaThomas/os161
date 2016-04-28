@@ -69,9 +69,9 @@ struct coremap_entry {
     bool recent:1;
     unsigned page_state;
     unsigned block_size;
+    int cpu;
     vaddr_t vaddr;
     struct addrspace *as;
-    struct bitmap *cpumap;
 };
 
 extern struct coremap_entry *coremap;
@@ -84,6 +84,7 @@ extern struct bitmap *swapmap;
 extern struct lock *lock_pte;
 extern struct lock *lock_swap;
 extern struct cv *cv_pte;
+extern struct semaphore *sem_tlb;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
