@@ -60,7 +60,6 @@ vm_bootstrap()
         en.block_size = 0;
         en.vaddr = 0;
         en.as = NULL;
-	//en.cpumap = bitmap_create(cpuarray_num(&allcpus));
         coremap[i] = en;
     }
     vm_bootstrapped = true;
@@ -432,13 +431,13 @@ page_evict(unsigned index, int page_state)
     tlbshootdown(coremap[index].as,coremap[index].vaddr);
 
     //write the page to disk if the page_state is dirty
-//    if(page_state == PS_DIRTY) {
+    //if(page_state == PS_DIRTY) {
         int err = swap_out(evict_pte);
         if(err) {
             return err;
         }
         evict_pte->on_disk = true;
-//    }
+    //}
     lock_acquire(lock_pte);
     evict_pte->locked = false;
     cv_broadcast(cv_pte,lock_pte);
@@ -451,7 +450,7 @@ int
 swap_out(struct page_table_entry *pte)
 {
 
-    if(pte->swap_index == -1) {
+    if(!pte->on_disk) {
         for(int i = 0; i < MAX_SWAP; i++) {
             if(!bitmap_isset(swapmap,i)) {
                 lock_acquire(lock_swap);

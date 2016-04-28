@@ -182,6 +182,9 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 return ENOMEM;
             }
             temp->vaddr = t_oldpte->vaddr;
+	    temp->swap_index = -1;
+	    temp->on_disk = false;
+	    temp->locked = false;
             if(t_oldpte->paddr != 0) {
 		temp->paddr = page_alloc(1,t_newpte->vaddr,new_as);
                 if(temp->paddr == 0) {
@@ -194,6 +197,23 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 	    }
 	    else {
 		temp->paddr = 0;
+		if(swap_enable) {
+			char kbuf[4096];
+			//read the old_pte to buffer
+			struct iovec iov;
+			struct uio kuio;
+			uio_kinit(&iov, &kuio, kbuf, PAGE_SIZE, t_oldpte->swap_index*PAGE_SIZE, UIO_READ);
+			int err = VOP_READ(swap_disk,uio);
+			if(err) {
+				return err;
+			}
+			//write the buffer to disk for new_pte
+			err = swap_out(temp);
+			if(err) {
+				return err;
+			}
+			temp->on_disk = true;
+		}
 	    }
 	    temp->next = NULL;
             t_newpte->next = temp;
