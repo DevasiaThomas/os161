@@ -32,6 +32,7 @@ struct bitmap *swapmap;
 //bool swapmap[MAX_SWAP];
 struct lock *lock_swap;
 struct lock *lock_pte;
+struct lock *lock_copy;
 struct cv *cv_pte;
 struct semaphore *sem_tlb;
 int num_swap = 0;
@@ -60,7 +61,7 @@ vm_bootstrap()
         en.recent = false;
         en.block_size = 0;
         en.vaddr = 0;
-	en.cpu = -1;
+	    en.cpu = -1;
         en.as = NULL;
         coremap[i] = en;
     }
@@ -85,6 +86,7 @@ swap_bootstrap()
     lock_pte = lock_create("lock_pte");
     cv_pte = cv_create("cv_pte");
     sem_tlb = sem_create("sem_tlb",0);
+    lock_copy = lock_create("lock_copy");
 }
 
 paddr_t
@@ -196,7 +198,7 @@ page_free(struct page_table_entry *pte)
 
     //if page is on the disk, change the status of swapmap for the page to unused
     if(pte->on_disk) {
-       	bitmap_unmark(swapmap,pte->swap_index); 
+       	bitmap_unmark(swapmap,pte->swap_index);
 	//swapmap[pte->swap_index] = false;
     }
     else {
@@ -277,7 +279,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     int permission;// = AS_WRITEABLE;
     bool valid = check_if_valid(faultaddress,as,&permission);
     if(!valid) {
-        panic("didn't lie in any region\n");
         return EFAULT;
     }
 
@@ -307,7 +308,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
         if(pte == NULL) {
-            panic("not enough memory\n");
             return ENOMEM;
         }
     }
@@ -327,10 +327,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
             if (err) {
                 return err;
             }
-            pte->on_disk = false;
+            //pte->on_disk = false;
         }
         else if(pte->paddr == 0) {
-            panic("not enough memory");
             return ENOMEM;
         }
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_CLEAN;
@@ -422,9 +421,13 @@ page_evict(unsigned index, int page_state)
     //lock the page and change the state to locked and shootdown tlb entry
     struct page_table_entry *evict_pte = get_pte(coremap[index].as,coremap[index].vaddr);
     lock_acquire(lock_pte);
+    if(evict_pte->locked) {
+        cv_wait(cv_pte,lock_pte);
+    }
     evict_pte->locked = true;
     lock_release(lock_pte);
 
+    //KASSERT(coremap[index].cpu >= 0);
     tlbshootdown(coremap[index].as,coremap[index].vaddr,coremap[index].cpu);
 
     //write the page to disk if the page_state is dirty
@@ -447,25 +450,23 @@ int
 swap_out(struct page_table_entry *pte)
 {
 
+    lock_acquire(lock_swap);
     if(!pte->on_disk) {
         for(int i = 0; i < MAX_SWAP; i++) {
             if(!bitmap_isset(swapmap,i)) {
-                lock_acquire(lock_swap);
                 if(!bitmap_isset(swapmap,i)) {
                     pte->swap_index = i;
                     bitmap_mark(swapmap,i);
-		    //swapmap[i] = true;
-                    lock_release(lock_swap);
                     break;
                 }
-                lock_release(lock_swap);
             }
         }
         if(pte->swap_index == -1) {
-            panic("swap_disk full\n");
+            lock_release(lock_swap);
             return -1;
         }
     }
+    lock_release(lock_swap);
 
     struct iovec iov;
     struct uio kuio;
@@ -473,7 +474,6 @@ swap_out(struct page_table_entry *pte)
     uio_kinit(&iov, &kuio, (void *)PADDR_TO_KVADDR(pte->paddr), PAGE_SIZE, pte->swap_index*PAGE_SIZE, UIO_WRITE);
     int err = VOP_WRITE(swap_disk,&kuio);
     if(err) {
-        panic("disk_write unsuccessful\n");
         return err;
     }
     num_swap++;
@@ -498,5 +498,6 @@ swap_in(struct page_table_entry *pte)
     bitmap_unmark(swapmap,pte->swap_index);
     //swapmap[pte->swap_index] = false;
     pte->swap_index = -1;
+    pte->on_disk = false;
     return 0;
 }
