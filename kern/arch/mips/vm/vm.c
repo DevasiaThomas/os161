@@ -199,7 +199,7 @@ page_free(struct page_table_entry *pte)
     //if page is on the disk, change the status of swapmap for the page to unused
     if(pte->on_disk) {
 	if(bitmap_isset(swapmap,pte->swap_index)) {
-       		bitmap_unmark(swapmap,pte->swap_index); 
+       		bitmap_unmark(swapmap,pte->swap_index);
 	}
 	//swapmap[pte->swap_index] = false;
     }
@@ -308,7 +308,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     //check if page_fault
     struct page_table_entry *pte = get_pte(as,faultaddress);
 
-    
+
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
         if(pte == NULL) {
@@ -317,13 +317,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     }
 
     lock_acquire(lock_pte);
-    if(pte->locked) {
+    while(pte->locked) {
         cv_wait(cv_pte,lock_pte);
     }
     lock_release(lock_pte);
 
     /* wait if swapping is going on */
-    
+
     if(pte->paddr == 0) {
         vaddr_t vaddr_temp = faultaddress;
         pte->paddr = page_alloc(1,vaddr_temp,as);
@@ -426,7 +426,7 @@ page_evict(unsigned index, int page_state)
     //lock the page and change the state to locked and shootdown tlb entry
     struct page_table_entry *evict_pte = get_pte(coremap[index].as,coremap[index].vaddr);
     lock_acquire(lock_pte);
-    if(evict_pte->locked) {
+    while(evict_pte->locked) {
         cv_wait(cv_pte,lock_pte);
     }
     evict_pte->locked = true;
