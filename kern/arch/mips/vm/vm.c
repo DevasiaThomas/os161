@@ -196,7 +196,9 @@ page_free(struct page_table_entry *pte)
 
     //if page is on the disk, change the status of swapmap for the page to unused
     if(pte->on_disk) {
-       	bitmap_unmark(swapmap,pte->swap_index); 
+	if(bitmap_isset(swapmap,pte->swap_index)) {
+       		bitmap_unmark(swapmap,pte->swap_index); 
+	}
 	//swapmap[pte->swap_index] = false;
     }
     else {
