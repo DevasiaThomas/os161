@@ -31,10 +31,14 @@
 #include <kern/errno.h>
 #include <lib.h>
 #include <spl.h>
+#include <synch.h>
 #include <addrspace.h>
 #include <machine/tlb.h>
 #include <vm.h>
 #include <proc.h>
+#include <vnode.h>
+#include <vfs.h>
+#include <uio.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -50,6 +54,8 @@ void free_list(struct region_entry**);
 void free_page_table(struct page_table_entry **);
 int copy_regions(struct addrspace *, struct region_entry **);
 void free_pte(struct addrspace *as, vaddr_t vaddr);
+
+char kbuf[PAGE_SIZE];
 
 void
 free_page_table(struct page_table_entry **pte) {
@@ -158,18 +164,73 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         if(head == false) {
             head = true;
             t_newpte->vaddr = t_oldpte->vaddr;
+            t_newpte->swap_index = -1;
+            t_newpte->on_disk = false;
+            t_newpte->locked = false;
             if(t_oldpte->paddr != 0) {
+
+		lock_acquire(lock_copy);
+		lock_acquire(lock_pte);
+		if(t_oldpte->locked) {
+			cv_wait(cv_pte,lock_pte);
+		}
+		t_oldpte->locked = true;
+		lock_release(lock_pte);
+
+
+		memmove((void *)kbuf,(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+	        
+		lock_acquire(lock_pte);
+		t_oldpte->locked = false;
+		cv_broadcast(cv_pte,lock_pte);
+		lock_release(lock_pte);
+		
 		t_newpte->paddr = page_alloc(1,t_newpte->vaddr,new_as);
                 if(t_newpte->paddr == 0) {
-			kfree(t_newpte);
+	    	        kfree(t_newpte);
+			lock_release(lock_copy);
                 	return ENOMEM;
                 }
-                memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),(const void *)kbuf,PAGE_SIZE);
                 coremap[t_newpte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+		lock_release(lock_copy);
 
 	    }
 	    else {
-		t_newpte->paddr = 0;
+	        t_newpte->paddr = 0;
+            	if(swap_enable && t_oldpte->on_disk) {
+                	lock_acquire(lock_copy);
+
+			lock_acquire(lock_pte);
+			if(t_oldpte->locked) {
+				cv_wait(cv_pte,lock_pte);
+			}
+			t_oldpte->locked = true;
+			lock_release(lock_pte);
+
+	                //read the old_pte to buffer
+	                struct iovec iov;
+	                struct uio kuio;
+	                uio_kinit(&iov, &kuio, kbuf, PAGE_SIZE, t_oldpte->swap_index*PAGE_SIZE, UIO_READ);
+	                int err = VOP_READ(swap_disk,&kuio);
+	                if(err) {
+                        	lock_release(lock_copy);
+	                   	return err;
+	                }
+			lock_acquire(lock_pte);
+			cv_broadcast(cv_pte,lock_pte);
+			t_oldpte->locked = false;
+			lock_release(lock_pte);
+	                //write the buffer to disk for new_pte
+	                err = swap_out(t_newpte);
+	                if(err) {
+                        lock_release(lock_copy);
+	                    return err;
+	                }
+	                t_newpte->on_disk = true;
+                    lock_release(lock_copy);
+	        }
+
 	    }
             t_newpte->next = NULL;
             new_as->page_table = t_newpte;
@@ -186,34 +247,65 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 	    temp->on_disk = false;
 	    temp->locked = false;
             if(t_oldpte->paddr != 0) {
+	        lock_acquire(lock_copy);
+		
+		lock_acquire(lock_pte);
+		if(t_oldpte->locked) {
+			cv_wait(cv_pte,lock_pte);
+		}
+		t_oldpte->locked = true;
+		lock_release(lock_pte);
+	
+		memmove((void *)kbuf,(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
 		temp->paddr = page_alloc(1,t_newpte->vaddr,new_as);
-                if(temp->paddr == 0) {
-			kfree(temp);
-                	return ENOMEM;
+            	if(temp->paddr == 0) {
+	                kfree(temp);
+                    return ENOMEM;
                 }
-                memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)kbuf,PAGE_SIZE);
                 coremap[temp->paddr/PAGE_SIZE].page_state = PS_DIRTY;
-
+                lock_acquire(lock_pte);
+                t_oldpte->locked = false;
+                cv_broadcast(cv_pte,lock_pte);
+                lock_release(lock_pte);
+		lock_release(lock_copy);
 	    }
 	    else {
-		temp->paddr = 0;
-		/*if(swap_enable) {
-			char kbuf[4096];
-			//read the old_pte to buffer
-			struct iovec iov;
-			struct uio kuio;
-			uio_kinit(&iov, &kuio, kbuf, PAGE_SIZE, t_oldpte->swap_index*PAGE_SIZE, UIO_READ);
-			int err = VOP_READ(swap_disk,uio);
-			if(err) {
-				return err;
-			}
-			//write the buffer to disk for new_pte
-			err = swap_out(temp);
-			if(err) {
-				return err;
-			}
-			temp->on_disk = true;
-		}*/
+	        temp->paddr = 0;
+	        if(swap_enable) {
+                    lock_acquire(lock_copy);
+
+		    lock_acquire(lock_pte);
+		    if(t_oldpte->locked) {
+			cv_wait(cv_pte,lock_pte);
+		    }
+		    t_oldpte->locked = true;
+		    lock_release(lock_pte);
+
+	            //read the old_pte to buffer
+	            struct iovec iov;
+	            struct uio kuio;
+	            uio_kinit(&iov, &kuio, kbuf, PAGE_SIZE, t_oldpte->swap_index*PAGE_SIZE, UIO_READ);
+	            int err = VOP_READ(swap_disk,&kuio);
+	            if(err) {
+                    	lock_release(lock_copy);
+	                return err;
+	            }
+	            //write the buffer to disk for new_pte
+	            err = swap_out(temp);
+	            if(err) {
+                        lock_release(lock_copy);
+	                return err;
+	            }
+	            temp->on_disk = true;
+
+		    lock_acquire(lock_pte);
+		    cv_broadcast(cv_pte,lock_pte);
+		    t_oldpte->locked = true;
+		    lock_release(lock_pte);
+
+                    lock_release(lock_copy);
+	        }
 	    }
 	    temp->next = NULL;
             t_newpte->next = temp;

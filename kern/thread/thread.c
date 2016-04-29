@@ -1180,6 +1180,9 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 
 void
 tlbshootdown(struct addrspace *as, vaddr_t vaddr, int cpuid) {
+    if(cpuid == -1) {
+	return;
+    }
     struct cpu *cpu;
     struct tlbshootdown tlbshootdown_temp;
     tlbshootdown_temp.ts_as = as;
