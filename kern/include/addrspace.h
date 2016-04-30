@@ -55,7 +55,8 @@ struct page_table_entry{
     int swap_index;
     vaddr_t vaddr;
     paddr_t paddr;
-    struct page_table_entry * next;
+    struct lock *pte_lock;
+    struct page_table_entry *next;
 };
 
 

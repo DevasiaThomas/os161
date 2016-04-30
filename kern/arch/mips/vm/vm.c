@@ -31,9 +31,7 @@ bool swap_enable = false;
 struct bitmap *swapmap;
 //bool swapmap[MAX_SWAP];
 struct lock *lock_swap;
-struct lock *lock_pte;
 struct lock *lock_copy;
-struct cv *cv_pte;
 struct semaphore *sem_tlb;
 int num_swap = 0;
 
@@ -83,8 +81,6 @@ swap_bootstrap()
 
     swapmap = bitmap_create(MAX_SWAP);
     lock_swap = lock_create("lock_swap");
-    lock_pte = lock_create("lock_pte");
-    cv_pte = cv_create("cv_pte");
     sem_tlb = sem_create("sem_tlb",0);
     lock_copy = lock_create("lock_copy");
 }
@@ -195,18 +191,17 @@ page_free(struct page_table_entry *pte)
     coremap[index].vaddr = 0;
     coremap[index].as = NULL;
     //coremap[index].recent = false;
+    spinlock_release(&splk_coremap);
 
     //if page is on the disk, change the status of swapmap for the page to unused
     if(pte->on_disk) {
-	if(bitmap_isset(swapmap,pte->swap_index)) {
-       		bitmap_unmark(swapmap,pte->swap_index);
-	}
-	//swapmap[pte->swap_index] = false;
+	    if(bitmap_isset(swapmap,pte->swap_index)) {
+            bitmap_unmark(swapmap,pte->swap_index);
+	    }
     }
     else {
         num_allocated_pages--;
     }
-    spinlock_release(&splk_coremap);
 }
 
 vaddr_t
@@ -316,11 +311,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         }
     }
 
-    lock_acquire(lock_pte);
-    while(pte->locked) {
-        cv_wait(cv_pte,lock_pte);
-    }
-    lock_release(lock_pte);
+    lock_acquire(pte->pte_lock);
 
     /* wait if swapping is going on */
 
@@ -332,7 +323,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
             if (err) {
                 return err;
             }
-            //pte->on_disk = false;
         }
         else if(pte->paddr == 0) {
             return ENOMEM;
@@ -361,8 +351,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     else {
         tlb_random(ehi,elo);
     }
-    splx(spl);
 
+    splx(spl);
+    lock_release(pte->pte_lock);
     return 0;
 }
 
@@ -425,12 +416,7 @@ page_evict(unsigned index, int page_state)
 
     //lock the page and change the state to locked and shootdown tlb entry
     struct page_table_entry *evict_pte = get_pte(coremap[index].as,coremap[index].vaddr);
-    lock_acquire(lock_pte);
-    while(evict_pte->locked) {
-        cv_wait(cv_pte,lock_pte);
-    }
-    evict_pte->locked = true;
-    lock_release(lock_pte);
+    lock_acquire(evict_pte->pte_lock);
 
     //KASSERT(coremap[index].cpu >= 0);
     tlbshootdown(coremap[index].as,coremap[index].vaddr,coremap[index].cpu);
@@ -439,14 +425,12 @@ page_evict(unsigned index, int page_state)
     //if(page_state == PS_DIRTY) {
         int err = swap_out(evict_pte);
         if(err) {
+            lock_release(evict_pte->pte_lock);
             return err;
         }
         evict_pte->on_disk = true;
     //}
-    lock_acquire(lock_pte);
-    evict_pte->locked = false;
-    cv_broadcast(cv_pte,lock_pte);
-    lock_release(lock_pte);
+    lock_release(evict_pte->pte_lock);
 
     return 0;
 }
