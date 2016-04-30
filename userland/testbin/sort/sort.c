@@ -35,7 +35,7 @@
  *    Once the virtual memory assignment is complete, your system
  *    should survive this.
  */
-
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -45,6 +45,8 @@
 /* Larger than physical memory */
 #define SIZE  (144*1024)
 
+#define PROGRESS_INTERVAL 8000
+#define NEWLINE_FREQ 100
 
 /*
  * Quicksort.
@@ -56,7 +58,60 @@
  * Also, quicksort has somewhat more interesting memory usage patterns.
  */
 
-static int iters;
+static unsigned iters;
+
+static inline
+void
+progress() {
+	TEST161_LPROGRESS_N(iters, PROGRESS_INTERVAL);
+	if (iters > 0 && (iters % (PROGRESS_INTERVAL * NEWLINE_FREQ)) == 0) {
+		printf("\n");
+	}
+	++iters;
+}
+
+static void *
+local_memcpy(void *dst, const void *src, size_t len)
+{
+	size_t i;
+
+	/*
+	 * memcpy does not support overlapping buffers, so always do it
+	 * forwards. (Don't change this without adjusting memmove.)
+	 *
+	 * For speedy copying, optimize the common case where both pointers
+	 * and the length are word-aligned, and copy word-at-a-time instead
+	 * of byte-at-a-time. Otherwise, copy by bytes.
+	 *
+	 * The alignment logic below should be portable. We rely on
+	 * the compiler to be reasonably intelligent about optimizing
+	 * the divides and modulos out. Fortunately, it is.
+	 */
+
+	if ((uintptr_t)dst % sizeof(long) == 0 &&
+	    (uintptr_t)src % sizeof(long) == 0 &&
+	    len % sizeof(long) == 0) {
+
+		long *d = dst;
+		const long *s = src;
+
+		for (i=0; i<len/sizeof(long); i++) {
+			progress();
+			d[i] = s[i];
+		}
+	}
+	else {
+		char *d = dst;
+		const char *s = src;
+
+		for (i=0; i<len; i++) {
+			progress();
+			d[i] = s[i];
+		}
+	}
+
+	return dst;
+}
 
 static
 void
@@ -68,8 +123,6 @@ sort(int *arr, int size)
 	if (size<2) {
 		return;
 	}
-	TEST161_LPROGRESS_N(iters, 4000);
-	++iters;
 
 	pivot = size/2;
 	sort(arr, pivot);
@@ -79,6 +132,7 @@ sort(int *arr, int size)
 	j = pivot;
 	k = 0;
 	while (i<pivot && j<size) {
+		progress();
 		if (arr[i] < arr[j]) {
 			tmp[k++] = arr[i++];
 		}
@@ -87,13 +141,15 @@ sort(int *arr, int size)
 		}
 	}
 	while (i<pivot) {
+		progress();
 		tmp[k++] = arr[i++];
 	}
 	while (j<size) {
+		progress();
 		tmp[k++] = arr[j++];
 	}
 
-	memcpy(arr, tmp, size*sizeof(int));
+	local_memcpy(arr, tmp, size*sizeof(int));
 }
 
 ////////////////////////////////////////////////////////////
@@ -122,7 +178,9 @@ check(void)
 {
 	int i;
 
+	printf("\nChecking...");
 	for (i=0; i<SIZE-1; i++) {
+		TEST161_LPROGRESS_N(i, PROGRESS_INTERVAL);
 		if (A[i] > A[i+1]) {
 			errx(1, "Failed: A[%d] is %d, A[%d] is %d",
 			     i, A[i], i+1, A[i+1]);
