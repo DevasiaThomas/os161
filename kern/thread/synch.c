@@ -188,6 +188,7 @@ lock_acquire(struct lock *lock)
 	KASSERT(lock != NULL);
 	KASSERT(curthread->t_in_interrupt == false);
 
+	KASSERT(!lock_do_i_hold(lock));
 	spinlock_acquire(&lock->lk_lock);
 	//if(lock->thread_with_lock == curthread)
 	//{
