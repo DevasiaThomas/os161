@@ -101,12 +101,14 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                         //free_page_table(new_as->page_table);
                                         return ENOMEM;
                                     }
+				    lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
                                         new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_as);
                                         if(new_page_table[i][j][k][l] == 0) {
                                             kfree(new_page_table[i][j][k][l]);
                                             new_page_table[i][j][k][l]=NULL;
+					    lock_release(lock_copy);
                                             return ENOMEM;
                                         }
                                         memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
@@ -115,6 +117,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                     else {
                                         new_page_table[i][j][k][l]->paddr = 0;
                                     }
+				    lock_release(old_page_table[i][j][k][l]->pte_lock);
                                 }
                                 else {
                                     new_page_table[i][j][k][l] = NULL;
@@ -538,6 +541,12 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
 
     temp->vaddr = vaddr & PAGE_FRAME;
     temp->paddr = paddr;
+    temp->on_disk = false;
+    temp->swap_index = -1;
+    temp->pte_lock = lock_create("pl");
+    if(temp->pte_lock == NULL) {
+	return null;
+    }
     as->page_table[top_index][second_index][third_index][forth_index] = temp;
 
     return temp;

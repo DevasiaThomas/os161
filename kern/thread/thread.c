@@ -1178,6 +1178,21 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 }
 
 void
+tlbshootdown(struct page_table_entry *pte, int cpuid)
+{
+	struct tlbshootdown ts;
+	ts.vaddr = pte->vaddr;
+	struct cpu *c = cpuarray_get(&allcpus, i);
+	if(cpu == curcpu->c_self) {
+		vm_tlbshootdown(ts);
+	}
+	else {
+		ipi_tlbshootdown(ts);
+	}
+	P(sem_tlb);
+}
+
+void
 interprocessor_interrupt(void)
 {
 	uint32_t bits;

@@ -54,6 +54,8 @@
 /* Initialization function */
 void vm_bootstrap(void);
 
+void swap_bootstrap(void);
+
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
 
@@ -63,6 +65,7 @@ bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
 /* coremap_entry */
 
 struct coremap_entry {
+    bool busy;
     unsigned page_state;
     unsigned block_size;
     vaddr_t vaddr;
@@ -73,6 +76,9 @@ extern struct coremap_entry *coremap;
 extern struct spinlock splk_coremap;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
+extern bool swap_enable;
+extern struct lock *lock_copy;
+extern struct semaphore *sem_tlb;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
