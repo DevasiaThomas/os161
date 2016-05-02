@@ -61,8 +61,8 @@ free_page_table(struct page_table_entry *pte) {
 */
 
 int copy_page_table(struct addrspace *, struct addrspace *newas);
-void free_list(struct region_entry*);
-void free_page_table(struct page_table_entry *****);
+void free_list(struct region_entry**);
+void free_page_table(struct page_table_entry ******);
 int copy_regions(struct addrspace *, struct region_entry **);
 void free_pte(struct addrspace *,vaddr_t vaddr);
 
@@ -77,44 +77,43 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         if(old_page_table[i] != NULL) {
             new_page_table[i] = kmalloc(256*sizeof(struct page_table_entry ***));
             if(new_page_table[i] == NULL) {
-                //free_page_table(new_as->page_table);
                 return ENOMEM;
             }
             for(int j = 0; j < 256; j++) {
                 if(old_page_table[i][j] != NULL) {
                     new_page_table[i][j] = kmalloc(256*sizeof(struct page_table_entry **));
                     if(new_page_table[i][j] == NULL) {
-                        //free_page_table(new_as->page_table);
                         return ENOMEM;
                     }
                     for(int k=0; k < 256; k++) {
                         if(old_page_table[i][j][k] != NULL) {
                             new_page_table[i][j][k] = kmalloc(256*sizeof(struct page_table_entry *));
                             if(new_page_table[i][j][k] == NULL) {
-                                //free_page_table(new_as->page_table);
                                 return ENOMEM;
                             }
                             for(int l=0; l < 256; l++) {
                                 if(old_page_table[i][j][k][l] != NULL) {
                                     new_page_table[i][j][k][l] = kmalloc(sizeof(struct page_table_entry));
                                     if(new_page_table[i][j][k][l] == NULL) {
-                                        //free_page_table(new_as->page_table);
                                         return ENOMEM;
                                     }
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
+                                    lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
+                                        lock_acquire(lock_copy);
+                                        memmove(kbuf,(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
                                         new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_as);
-                                        if(new_page_table[i][j][k][l] == 0) {
-                                            kfree(new_page_table[i][j][k][l]);
-                                            new_page_table[i][j][k][l]=NULL;
-                                            return ENOMEM;
-                                        }
-                                        memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
+                                        memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr,PAGE_SIZE));
                                         coremap[new_page_table[i][j][k][l]->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+                                        lock_release(lock_copy);
                                     }
                                     else {
                                         new_page_table[i][j][k][l]->paddr = 0;
+                                        lock_acquire(lock_copy);
+
+                                        lock_release(lock_copy);
                                     }
+                                    lock_release(old_page_table[i][j][k][l]->pte_lock);
                                 }
                                 else {
                                     new_page_table[i][j][k][l] = NULL;
@@ -181,16 +180,17 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 }
 
 void
-free_list(struct region_entry *reg_list) {
+free_list(struct region_entry **reg_list) {
     if(reg_list == NULL) {
         return;
     }
-    struct region_entry *t_reg = reg_list;
+    struct region_entry *t_reg = *reg_list;
     while(t_reg != NULL) {
         struct region_entry *temp = t_reg->next;
         kfree(t_reg);
         t_reg = temp;
     }
+    *reg_list = NULL;
     return;
 }
 
@@ -227,7 +227,7 @@ copy_regions(struct addrspace *old_as, struct region_entry **newreg)
         else {
             struct region_entry *temp = kmalloc(sizeof(struct region_entry));
             if(temp == NULL) {
-                free_list(head);
+                free_list(&head);
                 return ENOMEM;
             }
             temp->reg_base = t_oldreg->reg_base;
@@ -247,33 +247,42 @@ copy_regions(struct addrspace *old_as, struct region_entry **newreg)
 }
 
 void
-free_page_table(struct page_table_entry *****page_table)
+free_page_table(struct page_table_entry ******page_table)
 {
-    if(page_table == NULL) {
+    if(*page_table == NULL) {
         return;
     }
+    struct page_table_entry *****t_page_table = *page_table;
+
     for(int i=0; i < 256; i++) {
-        if(page_table[i] != NULL) {
+        if(t_page_table[i] != NULL) {
             for(int j=0; j<256; j++) {
-                if(page_table[i][j] != NULL) {
+                if(t_page_table[i][j] != NULL) {
                     for(int k=0; k<256; k++) {
-                        if(page_table[i][j][k] != NULL) {
+                        if(t_page_table[i][j][k] != NULL) {
                             for(int l=0; l < 256; l++) {
-                                if(page_table[i][j][k][l] != NULL) {
-                                    page_free(page_table[i][j][k][l]->paddr);
-                                    kfree(page_table[i][j][k][l]);
+                                if(t_page_table[i][j][k][l] != NULL) {
+                                    if(t_page_table[i][j][k][l]->paddr != 0) {
+                                        page_free(t_page_table[i][j][k][l]->paddr);
+                                    }
+                                    kfree(t_page_table[i][j][k][l]);
+                                    t_page_table[i][j][k][l] = NULL;
                                 }
                             }
-                            kfree(page_table[i][j][k]);
+                            kfree(t_page_table[i][j][k]);
+                            t_page_table[i][j][k] = NULL;
                         }
                     }
-                    kfree(page_table[i][j]);
+                    kfree(t_page_table[i][j]);
+                    t_page_table[i][j] = NULL;
                 }
             }
-            kfree(page_table[i]);
+            kfree(t_page_table[i]);
+            t_page_table[i] = NULL;
         }
     }
-    kfree(page_table);
+    kfree(t_page_table);
+    *page_table = NULL;
     return;
 }
 
@@ -343,10 +352,10 @@ as_destroy(struct addrspace *as)
 	 * Clean up as needed.
 	 */
     if(as) {
-        free_page_table(as->page_table);
+        free_page_table(&as->page_table);
         as->page_table = NULL;
         //free_list(as->page_table);
-        free_list(as->regions);
+        free_list(&as->regions);
     }
 	kfree(as);
 }

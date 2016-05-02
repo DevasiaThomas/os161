@@ -19,6 +19,7 @@ struct coremap_entry *coremap;
 unsigned num_fixed = 0;
 bool vm_bootstrapped = false;
 static unsigned search_start = 0;
+struct vnode *swap_disk;
 
 void
 vm_bootstrap()
@@ -48,6 +49,19 @@ vm_bootstrap()
     }
     vm_bootstrapped = true;
 
+}
+
+void
+swap_bootstrap()
+{
+    int err = vfs_open((const char *)"lhd0raw:",O_RDWR,0,&swap_disk);
+    if(err) {
+        swap_enable = false;
+        return;
+    }
+    swap_enable = true;
+
+    lock_create(lock_copy);
 }
 
 paddr_t
@@ -206,18 +220,20 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     //check if page_fault
     struct page_table_entry *pte = get_pte(as,faultaddress);
+    lock_acquire(pte->pte_lock);
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
         if(pte == NULL) {
-        return ENOMEM;
+            return ENOMEM;
         }
     }
-    if(pte->paddr == 0) {
-        vaddr_t vaddr_temp = faultaddress & PAGE_FRAME;
-        pte->paddr = page_alloc(1,vaddr_temp,as);
+    if(pte->paddr == 0 || pte->on_disk) {
+        pte->paddr = page_alloc(1,fault_address,as);
         if(pte->paddr == 0) {
             return ENOMEM;
         }
+        if(pte->on_disk);
+        int err = swap_in(pte);
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
     }
 
@@ -238,7 +254,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         tlb_random(ehi,elo);
     }
     splx(spl);
-
+    lock_release(pte->pte_lock);
 
     return 0;
 }
