@@ -111,10 +111,9 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
                                     new_page_table[i][j][k][l]->swap_index = -1;
                                     new_page_table[i][j][k][l]->on_disk = false;
-                                    lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
-                                        lock_acquire(lock_copy);
-                                        memmove(kbuf,(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
+                                  	lock_acquire(lock_copy);
+					memmove(kbuf,(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
                                         new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_page_table[i][j][k][l]);
                                         if(new_page_table[i][j][k][l]->paddr == 0) {
                                             lock_release(lock_copy);
@@ -122,7 +121,6 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                             return ENOMEM;
                                         }
                                         memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),kbuf,PAGE_SIZE);
-                                        coremap[new_page_table[i][j][k][l]->paddr/PAGE_SIZE].page_state = PS_DIRTY;
                                         lock_release(lock_copy);
                                     }
                                     else {
@@ -152,11 +150,15 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                             lock_release(old_page_table[i][j][k][l]->pte_lock);
                                             return err;
                                         }
-
                                         lock_release(lock_copy);
                                     }
                                     new_page_table[i][j][k][l]->pte_lock = lock_create("pl");
                                     if(new_page_table[i][j][k][l]->pte_lock == NULL) {
+                                        lock_release(old_page_table[i][j][k][l]->pte_lock);
+                                        return ENOMEM;
+                                    }
+				    new_page_table[i][j][k][l]->pte_cv = cv_create("pc");
+                                    if(new_page_table[i][j][k][l]->pte_cv == NULL) { //destroy on error
                                         lock_release(old_page_table[i][j][k][l]->pte_lock);
                                         return ENOMEM;
                                     }
@@ -309,10 +311,21 @@ free_page_table(struct page_table_entry ******page_table)
                         if(t_page_table[i][j][k] != NULL) {
                             for(int l=0; l < 256; l++) {
                                 if(t_page_table[i][j][k][l] != NULL) {
-                                    if(t_page_table[i][j][k][l]->paddr != 0) {
-                                        page_free(t_page_table[i][j][k][l]);
-                                    }
-                                    kfree(t_page_table[i][j][k][l]->pte_lock);
+                                    lock_acquire(t_page_table[i][j][k][l]->pte_lock);
+				    if(t_page_table[i][j][k][l]->on_disk) {
+					swapmap[t_page_table[i][j][k][l]->swap_index] = false;
+					goto nowait;
+				    }
+				    while(coremap[t_page_table[i][j][k][l]->paddr/4096].busy) {
+					cv_wait(t_page_table[i][j][k][l]->pte_cv,t_page_table[i][j][k][l]->pte_lock);
+				    }
+				    nowait:
+				    if(!t_page_table[i][j][k][l]->on_disk) {
+					page_free(t_page_table[i][j][k][l]);
+				    }
+				    lock_release(t_page_table[i][j][k][l]->pte_lock);
+				    lock_destroy(t_page_table[i][j][k][l]->pte_lock);
+				    cv_destroy(t_page_table[i][j][k][l]->pte_cv);
                                     kfree(t_page_table[i][j][k][l]);
                                     t_page_table[i][j][k][l] = NULL;
                                 }
@@ -399,13 +412,13 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
-    /*if(as) {
+    if(as) {
         free_page_table(&as->page_table);
         as->page_table = NULL;
         //free_list(as->page_table);
         free_list(&as->regions);
     }
-	kfree(as);*/
+	kfree(as);
     (void)as;
 }
 
@@ -602,6 +615,11 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     if(temp->pte_lock == NULL) {
 	    return NULL;
     }
+    temp->pte_cv = cv_create("pc");
+    if(temp->pte_cv == NULL) {
+	    return NULL;
+    }
+
     as->page_table[top_index][second_index][third_index][forth_index] = temp;
 
     return temp;

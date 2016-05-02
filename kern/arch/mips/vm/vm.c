@@ -58,6 +58,7 @@ vm_bootstrap()
         en.block_size = 0;
         en.vaddr = 0;
         en.pte = NULL;
+	en.cpu = -1;
         coremap[i] = en;
     }
     vm_bootstrapped = true;
@@ -79,7 +80,7 @@ swap_bootstrap()
     }
 	swap_enable = true;
 	lock_copy = lock_create("lc");
-	sem_tlb = sem_create("st",1);
+	sem_tlb = sem_create("st",0);
     swap_lock = lock_create("sl");
 }
 
@@ -157,6 +158,9 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct page_table_entry *pte)
 				return 0;
 			}
 		}
+		else {
+			coremap[j].busy = false;
+		}
 	}
         coremap[j].page_state = (pte == NULL)?PS_FIXED:PS_VICTIM;
         coremap[j].block_size = npages;
@@ -182,6 +186,7 @@ page_free(struct page_table_entry *pte)
         coremap[index].block_size = 0;
         coremap[index].vaddr = 0;
         coremap[index].pte = NULL;
+	coremap[index].cpu = -1;
         num_allocated_pages -= 1;
         spinlock_release(&splk_coremap);
 }
@@ -212,6 +217,7 @@ free_kpages(vaddr_t addr)
             coremap[i].page_state = PS_FREE;
             coremap[i].block_size = 0;
 	        coremap[i].vaddr = 0;
+		coremap[i].cpu = -1;
         }
         spinlock_release(&splk_coremap);
     }
@@ -260,13 +266,20 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     switch(faulttype) {
         case VM_FAULT_READONLY:
-
+	    //if((permission & AS_WRITEABLE) == AS_WRITEABLE) {
+		//return EFAULT;
+	    //}
             break;
         case VM_FAULT_READ:
-
+	    //if(!((permission & AS_READABLE) == AS_READABLE)) {
+	    //	return EFAULT;
+	    //}
+	    permission &= AS_READABLE;
             break;
         case VM_FAULT_WRITE:
-
+	    //if(!((permission & AS_WRITEABLE) == AS_WRITEABLE)) {
+	    //	return EFAULT;
+	    //}
             break;
         default:
             return EINVAL;
@@ -288,15 +301,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	        lock_release(pte->pte_lock);
             return ENOMEM;
         }
-	    if(pte->on_disk) {
-	    int err = swap_in(pte);
-	    if(err) {
-	        lock_release(pte->pte_lock);
-	    	return err;
-	    }
+	if(pte->on_disk) {
+		int err = swap_in(pte);
+		if(err) {
+	   		lock_release(pte->pte_lock);
+			return err;
+		}
 	}
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
-	    coremap[pte->paddr/PAGE_SIZE].cpu = curcpu->c_number;
     }
 
     int spl = splhigh();
@@ -305,6 +317,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     if((permission & AS_WRITEABLE) == AS_WRITEABLE) {
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+	coremap[pte->paddr/PAGE_SIZE].cpu = curthread->t_cpu->c_number;
         elo = pte->paddr | TLBLO_DIRTY | TLBLO_VALID;
     }
 
@@ -383,6 +396,8 @@ evict_page(unsigned index, int page_state)
 		lock_release(evict_pte->pte_lock);
 		return err;
 	}
+	coremap[index].busy = false;
+	cv_broadcast(evict_pte->pte_cv,evict_pte->pte_lock);
 	lock_release(evict_pte->pte_lock);
 	return 0;
 }

@@ -55,6 +55,7 @@ struct page_table_entry{
     vaddr_t vaddr;
     paddr_t paddr;
     struct lock *pte_lock;
+    struct cv *pte_cv;
     //struct page_table_entry * next;
 };
 
