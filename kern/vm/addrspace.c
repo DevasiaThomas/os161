@@ -168,16 +168,16 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
     do {
         if(head == false) {
             head = true;
-            t_newpte->vaddr = t_oldpte->vaddr;
             t_newpte->swap_index = -1;
             t_newpte->on_disk = false;
 
             lock_acquire(t_oldpte->pte_lock);
+            t_newpte->vaddr = t_oldpte->vaddr;
             if(t_oldpte->paddr != 0) {
                 lock_acquire(lock_copy);
                 KASSERT(t_oldpte->on_disk == false);
                 memmove((void *)kbuf,(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
-                t_newpte->paddr = page_alloc(1,t_newpte->vaddr,new_as);
+                t_newpte->paddr = page_alloc(1,t_newpte->vaddr,t_newpte);
                 if(t_newpte->paddr == 0) {
                     lock_release(lock_copy);
                     lock_release(t_oldpte->pte_lock);
@@ -247,15 +247,16 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
              //   free_page_table(&new_as->page_table);
                 return ENOMEM;
             }
-            temp->vaddr = t_oldpte->vaddr;
+
 	        temp->swap_index = -1;
 	        temp->on_disk = false;
 
             lock_acquire(t_oldpte->pte_lock);
+            temp->vaddr = t_oldpte->vaddr;
             if(t_oldpte->paddr != 0) {
                 lock_acquire(lock_copy);
                 memmove((void *)kbuf,(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
-                temp->paddr = page_alloc(1,t_newpte->vaddr,new_as);
+                temp->paddr = page_alloc(1,t_newpte->vaddr,temp);
                 if(temp->paddr == 0) {
                     kfree(temp);
                     return ENOMEM;

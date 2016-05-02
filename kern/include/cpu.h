@@ -168,7 +168,7 @@ void cpu_halt(void);
 void ipi_send(struct cpu *target, int code);
 void ipi_broadcast(int code);
 void ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping);
-void tlbshootdown(struct addrspace *as, vaddr_t vaddr, int cpuid);
+void tlbshootdown(vaddr_t vaddr, int cpuid);
 
 int get_cpunum(void);
 

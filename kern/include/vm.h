@@ -60,8 +60,6 @@ void swap_bootstrap(void);
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
 
-/* Check if valid address */
-bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
 
 /* coremap_entry */
 
@@ -71,7 +69,7 @@ struct coremap_entry {
     unsigned block_size;
     int cpu;
     vaddr_t vaddr;
-    struct addrspace *as;
+    struct page_table_entry *pte;
 };
 
 extern struct coremap_entry *coremap;

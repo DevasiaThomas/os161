@@ -35,6 +35,8 @@ struct lock *lock_copy;
 struct semaphore *sem_tlb;
 int num_swap = 0;
 
+bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
+
 void
 vm_bootstrap()
 {
@@ -59,8 +61,8 @@ vm_bootstrap()
         en.recent = false;
         en.block_size = 0;
         en.vaddr = 0;
-	    en.cpu = -1;
-        en.as = NULL;
+	en.cpu = -1;
+        en.pte = NULL;
         coremap[i] = en;
     }
     vm_bootstrapped = true;
@@ -86,7 +88,7 @@ swap_bootstrap()
 }
 
 paddr_t
-page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
+page_alloc(unsigned npages, vaddr_t vaddr,struct page_table_entry *pte)
 {
     int start_index = -1;
     int n_swap_pages = 0;
@@ -113,7 +115,9 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
                     for(unsigned j = i; j < i + npages; j++) {
                         if(coremap[j].page_state == PS_FIXED
                             || coremap[j].page_state == PS_VICTIM) {
-                            available = false;
+			    if(coremap[j].pte != NULL && lock_do_i_hold(coremap[j].pte->pte_lock)) {
+                            	available = false;
+			    }
                             break;
                         }
                     }
@@ -170,10 +174,10 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
             }
         }
         //coremap[j].recent = (as==NULL)?true:false;
-        coremap[j].page_state = (as == NULL)?PS_FIXED:PS_VICTIM;
+        coremap[j].page_state = (pte == NULL)?PS_FIXED:PS_VICTIM;
         coremap[j].block_size = npages;
-        coremap[j].vaddr = (as==NULL)?PADDR_TO_KVADDR(pa):(vaddr & PAGE_FRAME);
-        coremap[j].as = as;
+        coremap[j].vaddr = (pte==NULL)?PADDR_TO_KVADDR(pa):(vaddr & PAGE_FRAME);
+        coremap[j].pte = pte;
     }
 
     bzero((void *)PADDR_TO_KVADDR(pa), npages*PAGE_SIZE);
@@ -189,7 +193,7 @@ page_free(struct page_table_entry *pte)
     coremap[index].page_state = PS_FREE;
     coremap[index].block_size = 0;
     coremap[index].vaddr = 0;
-    coremap[index].as = NULL;
+    coremap[index].pte= NULL;
     //coremap[index].recent = false;
     spinlock_release(&splk_coremap);
 
@@ -251,11 +255,9 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 {
     //spinlock_acquire(&splk_tlb);
     int spl = splhigh();
-    if(curproc->p_addrspace == ts->ts_as) {
-        int index = tlb_probe(ts->ts_vaddr,0);
-        if(index > 0) {
-            tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
-        }
+    int index = tlb_probe(ts->ts_vaddr,0);
+    if(index > 0) {
+        tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
     }
     V(sem_tlb);
     splx(spl);
@@ -317,7 +319,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     if(pte->paddr == 0) {
         vaddr_t vaddr_temp = faultaddress;
-        pte->paddr = page_alloc(1,vaddr_temp,as);
+        pte->paddr = page_alloc(1,vaddr_temp,pte);
         if(pte->on_disk) {
             int err = swap_in(pte);
             if (err) {
@@ -415,11 +417,11 @@ page_evict(unsigned index, int page_state)
     }
 
     //lock the page and change the state to locked and shootdown tlb entry
-    struct page_table_entry *evict_pte = get_pte(coremap[index].as,coremap[index].vaddr);
+    struct page_table_entry *evict_pte = coremap[index].pte;
     lock_acquire(evict_pte->pte_lock);
 
     //KASSERT(coremap[index].cpu >= 0);
-    tlbshootdown(coremap[index].as,coremap[index].vaddr,coremap[index].cpu);
+    tlbshootdown(coremap[index].vaddr,coremap[index].cpu);
 
     //write the page to disk if the page_state is dirty
     //if(page_state == PS_DIRTY) {
