@@ -67,6 +67,7 @@ bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
 
 struct coremap_entry {
     bool recent:1;
+    bool busy;
     unsigned page_state;
     unsigned block_size;
     int cpu;
@@ -86,13 +87,14 @@ extern struct lock *lock_swap;
 extern struct lock *lock_copy;
 extern struct cv *cv_pte;
 extern struct semaphore *sem_tlb;
+extern struct spinlock splk_tlb;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
 /* swapping functions */
-int page_evict(unsigned index,int page_state);
+int page_evict(unsigned index,int page_state, struct addrspace *as);
 
 
 /*

@@ -1185,17 +1185,22 @@ tlbshootdown(struct addrspace *as, vaddr_t vaddr, int cpuid) {
     }
     struct cpu *cpu;
     struct tlbshootdown tlbshootdown_temp;
+    spinlock_acquire(&splk_tlb);
     tlbshootdown_temp.ts_as = as;
     tlbshootdown_temp.ts_vaddr = vaddr;
     cpu = cpuarray_get(&allcpus,cpuid);
     if(cpu != curcpu->c_self) {
         ipi_tlbshootdown(cpu ,&tlbshootdown_temp);
-	P(sem_tlb);
+        spinlock_release(&splk_tlb);
+	    P(sem_tlb);
+
     }
     else {
         vm_tlbshootdown(&tlbshootdown_temp);
-	P(sem_tlb);
+        spinlock_release(&splk_tlb);
+	    P(sem_tlb);
     }
+
 }
 
 void

@@ -143,10 +143,6 @@ sys_read(int fd, userptr_t buf, size_t nbytes, size_t *nbytes_read)
     struct iovec iov;
     struct uio u_io;
 
-    if (buf == NULL) {
-        return EFAULT;
-    }
-
     if (fd < 0 || fd >= OPEN_MAX) {
         return EBADF;
     }
