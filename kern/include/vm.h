@@ -75,6 +75,7 @@ extern struct coremap_entry *coremap;
 extern struct spinlock splk_coremap;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
+extern struct vnode *swap_disk;
 extern bool swap_enable;
 extern struct lock *lock_copy;
 extern struct semaphore *sem_tlb;

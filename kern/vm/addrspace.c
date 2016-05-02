@@ -109,17 +109,56 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                     }
                                     lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
+                                    new_page_table[i][j][k][l]->swap_index = -1;
+                                    new_page_table[i][j][k][l]->on_disk = false;
                                     lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
                                         lock_acquire(lock_copy);
                                         memmove(kbuf,(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
                                         new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_page_table[i][j][k][l]);
+                                        if(new_page_table[i][j][k][l]->paddr == 0) {
+                                            lock_release(lock_copy);
+                                            lock_release(old_page_table[i][j][k][l]->pte_lock);
+                                            return ENOMEM;
+                                        }
                                         memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),kbuf,PAGE_SIZE);
                                         coremap[new_page_table[i][j][k][l]->paddr/PAGE_SIZE].page_state = PS_DIRTY;
                                         lock_release(lock_copy);
                                     }
                                     else {
                                         new_page_table[i][j][k][l]->paddr = 0;
+                                        lock_acquire(lock_copy);
+                                        struct iovec iov;
+                                        struct uio kuio;
+                                        uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,old_page_table[i][j][k][l]->swap_index*PAGE_SIZE,UIO_READ);
+                                        int err = VOP_READ(swap_disk,&kuio);
+                                        if(err) {
+                                            lock_release(lock_copy);
+                                            lock_release(old_page_table[i][j][k][l]->pte_lock);
+                                            return err;
+                                        }
+                                        lock_acquire(swap_lock);
+                                        for(int i=0;i< MAX_SWAP; i++) {
+                                            if(swapmap[i] == false) {
+                                                new_page_table[i][j][k][l]->swap_index = i;
+                                                swapmap[i] = true;
+                                            }
+                                        }
+                                        lock_release(swap_lock);
+                                        uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,new_page_table[i][j][k][l]->swap_index*PAGE_SIZE,UIO_WRITE);
+                                        err = VOP_READ(swap_disk,&kuio);
+                                        if(err) {
+                                            lock_release(lock_copy);
+                                            lock_release(old_page_table[i][j][k][l]->pte_lock);
+                                            return err;
+                                        }
+
+                                        lock_release(lock_copy);
+                                    }
+                                    new_page_table[i][j][k][l]->pte_lock = lock_create("pl");
+                                    if(new_page_table[i][j][k][l]->pte_lock == NULL) {
+                                        lock_release(old_page_table[i][j][k][l]->pte_lock);
+                                        return ENOMEM;
                                     }
                                     lock_release(old_page_table[i][j][k][l]->pte_lock);
                                 }
@@ -273,6 +312,7 @@ free_page_table(struct page_table_entry ******page_table)
                                     if(t_page_table[i][j][k][l]->paddr != 0) {
                                         page_free(t_page_table[i][j][k][l]);
                                     }
+                                    kfree(t_page_table[i][j][k][l]->pte_lock);
                                     kfree(t_page_table[i][j][k][l]);
                                     t_page_table[i][j][k][l] = NULL;
                                 }
@@ -359,13 +399,14 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
-    if(as) {
+    /*if(as) {
         free_page_table(&as->page_table);
         as->page_table = NULL;
         //free_list(as->page_table);
         free_list(&as->regions);
     }
-	kfree(as);
+	kfree(as);*/
+    (void)as;
 }
 
 void
