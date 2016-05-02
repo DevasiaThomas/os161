@@ -7,6 +7,7 @@
 #include <types.h>
 #include <kern/fcntl.h>
 #include <kern/wait.h>
+#include <machine/vm.h>
 #include <syscall.h>
 #include <thread.h>
 #include <lib.h>

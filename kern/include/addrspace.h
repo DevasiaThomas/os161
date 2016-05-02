@@ -44,14 +44,17 @@
  */
 
 
-#include <vm.h>
+//#include <vm.h>
 #include "opt-dumbvm.h"
 
 struct vnode;
 
 struct page_table_entry{
+    bool on_disk;
+    int swap_index;
     vaddr_t vaddr;
     paddr_t paddr;
+    struct lock *pte_lock;
     //struct page_table_entry * next;
 };
 
@@ -151,6 +154,11 @@ struct page_table_entry* get_pte(struct addrspace *as, const vaddr_t faultaddres
 struct region_entry* add_region(struct addrspace *as, vaddr_t base, size_t sz, int readable, int writeable, int executable);
 
 void free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr);
+
+int evict_page(unsigned index, int page_state);
+int swap_out(struct page_table_entry *pte);
+int swap_in(struct page_table_entry *pte);
+
 /*
  * Functions in loadelf.c
  *    load_elf - load an ELF user program executable into the current

@@ -37,6 +37,7 @@
 #include <kern/errno.h>
 #include <lib.h>
 #include <array.h>
+#include <addrspace.h>
 #include <cpu.h>
 #include <spl.h>
 #include <spinlock.h>
@@ -47,7 +48,8 @@
 #include <proc.h>
 #include <current.h>
 #include <synch.h>
-#include <addrspace.h>
+
+#include <vm.h>
 #include <mainbus.h>
 #include <vnode.h>
 
@@ -1175,6 +1177,21 @@ ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping)
 	mainbus_send_ipi(target);
 
 	spinlock_release(&target->c_ipi_lock);
+}
+
+void
+tlbshootdown(vaddr_t vaddr, int cpuid)
+{
+	struct tlbshootdown ts;
+	ts.ts_vaddr = vaddr;
+	struct cpu *c = cpuarray_get(&allcpus, cpuid);
+	if(c == curcpu->c_self) {
+		vm_tlbshootdown(&ts);
+	}
+	else {
+		ipi_tlbshootdown(c,&ts);
+	}
+	P(sem_tlb);
 }
 
 void

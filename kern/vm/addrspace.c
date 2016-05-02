@@ -29,12 +29,20 @@
 
 #include <types.h>
 #include <kern/errno.h>
+#include <kern/fcntl.h>
+#include <limits.h>
 #include <lib.h>
 #include <spl.h>
+#include <synch.h>
 #include <addrspace.h>
+#include <vm.h>
 #include <machine/tlb.h>
+#include <machine/vm.h>
 #include <vm.h>
 #include <proc.h>
+#include <vnode.h>
+#include <uio.h>
+#include <vfs.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -59,6 +67,8 @@ free_page_table(struct page_table_entry *pte) {
 
 }
 */
+
+char kbuf[PAGE_SIZE];
 
 int copy_page_table(struct addrspace *, struct addrspace *newas);
 void free_list(struct region_entry**);
@@ -97,21 +107,19 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                                     if(new_page_table[i][j][k][l] == NULL) {
                                         return ENOMEM;
                                     }
+                                    lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     new_page_table[i][j][k][l]->vaddr = old_page_table[i][j][k][l]->vaddr;
                                     lock_acquire(old_page_table[i][j][k][l]->pte_lock);
                                     if(old_page_table[i][j][k][l]->paddr != 0) {
                                         lock_acquire(lock_copy);
                                         memmove(kbuf,(const void *)PADDR_TO_KVADDR(old_page_table[i][j][k][l]->paddr),PAGE_SIZE);
-                                        new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_as);
-                                        memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr,PAGE_SIZE));
+                                        new_page_table[i][j][k][l]->paddr = page_alloc(1,new_page_table[i][j][k][l]->vaddr,new_page_table[i][j][k][l]);
+                                        memmove((void *)PADDR_TO_KVADDR(new_page_table[i][j][k][l]->paddr),kbuf,PAGE_SIZE);
                                         coremap[new_page_table[i][j][k][l]->paddr/PAGE_SIZE].page_state = PS_DIRTY;
                                         lock_release(lock_copy);
                                     }
                                     else {
                                         new_page_table[i][j][k][l]->paddr = 0;
-                                        lock_acquire(lock_copy);
-
-                                        lock_release(lock_copy);
                                     }
                                     lock_release(old_page_table[i][j][k][l]->pte_lock);
                                 }
@@ -263,7 +271,7 @@ free_page_table(struct page_table_entry ******page_table)
                             for(int l=0; l < 256; l++) {
                                 if(t_page_table[i][j][k][l] != NULL) {
                                     if(t_page_table[i][j][k][l]->paddr != 0) {
-                                        page_free(t_page_table[i][j][k][l]->paddr);
+                                        page_free(t_page_table[i][j][k][l]);
                                     }
                                     kfree(t_page_table[i][j][k][l]);
                                     t_page_table[i][j][k][l] = NULL;
@@ -547,6 +555,12 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
 
     temp->vaddr = vaddr & PAGE_FRAME;
     temp->paddr = paddr;
+    temp->on_disk = false;
+    temp->swap_index = -1;
+    temp->pte_lock = lock_create("pl");
+    if(temp->pte_lock == NULL) {
+	    return NULL;
+    }
     as->page_table[top_index][second_index][third_index][forth_index] = temp;
 
     return temp;
@@ -617,7 +631,7 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
     if(as->page_table[top_index][second_index][third_index][forth_index] == NULL)
         return;
 
-    page_free(as->page_table[top_index][second_index][third_index][forth_index]->paddr);
+    page_free(as->page_table[top_index][second_index][third_index][forth_index]);
     as->page_table[top_index][second_index][third_index][forth_index]->paddr = 0;
     as->page_table[top_index][second_index][third_index][forth_index]->vaddr = 0;
     kfree(as->page_table[top_index][second_index][third_index][forth_index]);
@@ -634,7 +648,7 @@ free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr)
         if(pte == NULL) {
             continue;
         }
-        ipage_free(pte->paddr);
+        page_free(pte);
         pte->paddr = 0;
         pte->vaddr = 0;
         kfree(pte);*/

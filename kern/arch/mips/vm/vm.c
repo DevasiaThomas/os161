@@ -2,8 +2,11 @@
 
 #include <types.h>
 #include <kern/errno.h>
+#include <kern/fcntl.h>
+#include <limits.h>
 #include <lib.h>
 #include <spl.h>
+#include <synch.h>
 #include <cpu.h>
 #include <spinlock.h>
 #include <proc.h>
@@ -11,6 +14,9 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <vm.h>
+#include <vnode.h>
+#include <uio.h>
+#include <vfs.h>
 
 struct spinlock splk_coremap;
 unsigned num_allocated_pages = 0;
@@ -20,6 +26,13 @@ unsigned num_fixed = 0;
 bool vm_bootstrapped = false;
 static unsigned search_start = 0;
 struct vnode *swap_disk;
+bool swap_enable = false;
+struct lock *lock_copy;
+struct semaphore *sem_tlb;
+struct lock *swap_lock;
+bool swapmap[MAX_SWAP];
+
+bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permsission);
 
 void
 vm_bootstrap()
@@ -44,7 +57,7 @@ vm_bootstrap()
         }
         en.block_size = 0;
         en.vaddr = 0;
-        en.as = NULL;
+        en.pte = NULL;
         coremap[i] = en;
     }
     vm_bootstrapped = true;
@@ -54,23 +67,30 @@ vm_bootstrap()
 void
 swap_bootstrap()
 {
-    int err = vfs_open((const char *)"lhd0raw:",O_RDWR,0,&swap_disk);
-    if(err) {
-        swap_enable = false;
-        return;
-    }
-    swap_enable = true;
 
-    lock_create(lock_copy);
+	int err = vfs_open((char *)"lhd0raw:",O_RDWR,0,&swap_disk);
+	if(err) {
+		swap_enable = false;
+		return;
+	}
+
+    for(int i=0;i<MAX_SWAP;i++) {
+        swapmap[i] = false;
+    }
+	swap_enable = true;
+	lock_copy = lock_create("lc");
+	sem_tlb = sem_create("st",1);
+    swap_lock = lock_create("sl");
 }
 
 paddr_t
-page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
+page_alloc(unsigned npages, vaddr_t vaddr,struct page_table_entry *pte)
 {
     int start_index = -1;
     paddr_t pa;
+    int evict_page_state[npages];
     spinlock_acquire(&splk_coremap);
-    if(num_allocated_pages + npages >= num_total_pages - num_fixed) {
+    if(!swap_enable && num_allocated_pages + npages >= num_total_pages - num_fixed) {
         spinlock_release(&splk_coremap);
         return 0;
     }
@@ -80,7 +100,31 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
             i = num_fixed + 1;
             continue;
         }
-        if(coremap[i].page_state == PS_FREE) { //|| coremap[i].page_state == PS_CLEAN || coremap[i].page_state == PS_DIRTY) {
+	if(swap_enable) {
+		if(coremap[i].page_state == PS_FREE ||
+			coremap[i].page_state == PS_DIRTY ||
+			coremap[i].page_state == PS_CLEAN) {
+			bool available = true;
+            		for(unsigned j = i; j < i + npages; j++) {
+                	if(coremap[j].page_state == PS_FIXED
+                        	|| coremap[j].page_state == PS_VICTIM) {
+                    		available = false;
+                    		break;
+                		}
+            		}
+            		if(available) {
+                		start_index = i;
+                		pa = i*PAGE_SIZE;
+                		for(unsigned j = i; j < i + npages; j++) {
+					evict_page_state[j-i] = coremap[j].page_state;
+					coremap[j].busy = true;
+                    			coremap[j].page_state = PS_VICTIM;
+                		}
+                		break;
+			}
+		}
+	}
+        else if(coremap[i].page_state == PS_FREE) { //|| coremap[i].page_state == PS_CLEAN || coremap[i].page_state == PS_DIRTY) {
             bool available = true;
             for(unsigned j = i; j < i + npages; j++) {
                 if(coremap[j].page_state == PS_FIXED
@@ -106,10 +150,18 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
 
     spinlock_release(&splk_coremap);
     for(unsigned j = start_index; j < start_index + npages; j++) {
-        coremap[j].page_state = (as == NULL)?PS_FIXED:PS_VICTIM;
+	if(swap_enable) {
+		if(evict_page_state[j-start_index] != PS_FREE) {
+			int err = evict_page(j,evict_page_state[j-start_index]);
+			if(err) {
+				return 0;
+			}
+		}
+	}
+        coremap[j].page_state = (pte == NULL)?PS_FIXED:PS_VICTIM;
         coremap[j].block_size = npages;
-        coremap[j].vaddr = (as==NULL)?PADDR_TO_KVADDR(pa):(vaddr & PAGE_FRAME);
-        coremap[j].as = as;
+        coremap[j].vaddr = (pte==NULL)?PADDR_TO_KVADDR(pa):(vaddr & PAGE_FRAME);
+        coremap[j].pte = pte;
     }
 
     bzero((void *)PADDR_TO_KVADDR(pa), npages*PAGE_SIZE);
@@ -118,18 +170,20 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct addrspace *as)
 }
 
 void
-page_free(paddr_t paddr)
+page_free(struct page_table_entry *pte)
 {
-    if(paddr != 0) {
         spinlock_acquire(&splk_coremap);
-        unsigned index = paddr/PAGE_SIZE;
+	if(pte->on_disk) {
+		swapmap[pte->swap_index] = false;
+		return;
+	}
+        unsigned index = pte->paddr/PAGE_SIZE;
         coremap[index].page_state = PS_FREE;
         coremap[index].block_size = 0;
         coremap[index].vaddr = 0;
-        coremap[index].as = NULL;
+        coremap[index].pte = NULL;
         num_allocated_pages -= 1;
         spinlock_release(&splk_coremap);
-    }
 }
 
 vaddr_t
@@ -157,6 +211,7 @@ free_kpages(vaddr_t addr)
         for(unsigned i = index; i < index + block_size; i++) {
             coremap[i].page_state = PS_FREE;
             coremap[i].block_size = 0;
+	        coremap[i].vaddr = 0;
         }
         spinlock_release(&splk_coremap);
     }
@@ -178,13 +233,12 @@ void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
     int spl = splhigh();
-    if(curproc->p_addrspace == ts->ts_as) {
-        int index = tlb_probe(ts->ts_vaddr,0);
-        if(index > 0) {
-            tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
-        }
+    int index = tlb_probe(ts->ts_vaddr,0);
+    if(index > 0) {
+        tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
     }
     splx(spl);
+    V(sem_tlb);
 }
 
 int
@@ -220,21 +274,29 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     //check if page_fault
     struct page_table_entry *pte = get_pte(as,faultaddress);
-    lock_acquire(pte->pte_lock);
+
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
         if(pte == NULL) {
             return ENOMEM;
         }
     }
+    lock_acquire(pte->pte_lock);
     if(pte->paddr == 0 || pte->on_disk) {
-        pte->paddr = page_alloc(1,fault_address,as);
+        pte->paddr = page_alloc(1,faultaddress,pte);
         if(pte->paddr == 0) {
+	        lock_release(pte->pte_lock);
             return ENOMEM;
         }
-        if(pte->on_disk);
-        int err = swap_in(pte);
+	    if(pte->on_disk) {
+	    int err = swap_in(pte);
+	    if(err) {
+	        lock_release(pte->pte_lock);
+	    	return err;
+	    }
+	}
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+	    coremap[pte->paddr/PAGE_SIZE].cpu = curcpu->c_number;
     }
 
     int spl = splhigh();
@@ -298,4 +360,68 @@ debug_vm(void)
             kprintf("%u ",i);
         }
     }
+}
+
+int
+evict_page(unsigned index, int page_state)
+{
+    (void)page_state;
+	struct page_table_entry *evict_pte = coremap[index].pte;
+	if(evict_pte == NULL) {
+		coremap[index].busy = false;
+		return 0;
+	}
+	lock_acquire(evict_pte->pte_lock);
+	if(evict_pte->on_disk) {
+		coremap[index].busy = false;
+		lock_release(evict_pte->pte_lock);
+		return 0;
+	}
+	tlbshootdown(evict_pte->vaddr,coremap[index].cpu);
+	int err = swap_out(evict_pte);
+	if(err) {
+		lock_release(evict_pte->pte_lock);
+		return err;
+	}
+	lock_release(evict_pte->pte_lock);
+	return 0;
+}
+
+int
+swap_out(struct page_table_entry *pte)
+{
+	lock_acquire(swap_lock);
+	for(int i = 0; i < MAX_SWAP; i++) {
+		if(swapmap[i] == false) {
+			pte->swap_index = i;
+			swapmap[i] = true;
+			break;
+		}
+	}
+	lock_release(swap_lock);
+
+	struct iovec iov;
+	struct uio kuio;
+	uio_kinit(&iov, &kuio,(void *)PADDR_TO_KVADDR(pte->paddr), PAGE_SIZE, pte->swap_index*PAGE_SIZE, UIO_WRITE);
+	int err = VOP_WRITE(swap_disk,&kuio);
+	if(err) {
+		return err;
+	}
+	pte->paddr = 0;
+	pte->on_disk = true;
+    return 0;
+}
+
+int
+swap_in(struct page_table_entry *pte)
+{
+	struct iovec iov;
+	struct uio kuio;
+	uio_kinit(&iov, &kuio,(void *)PADDR_TO_KVADDR(pte->paddr), PAGE_SIZE, pte->swap_index*PAGE_SIZE, UIO_READ);
+	int err = VOP_READ(swap_disk,&kuio);
+	if(err) {
+		return err;
+	}
+	pte->on_disk = false;
+    return 0;
 }

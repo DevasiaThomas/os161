@@ -88,7 +88,7 @@
 /* Max bytes for atomic pipe I/O -- see description in the pipe() man page */
 #define __PIPE_BUF      512
 
-
+#define __MAX_SWAP      4096
 /*
  * Not so important parts of the API. (Especially in OS/161 where we
  * don't do credentials by default.)

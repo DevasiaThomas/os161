@@ -50,5 +50,6 @@
 #define IOV_MAX         __IOV_MAX
 
 #define PROC_MAX       __MAX_PROC
+#define MAX_SWAP       __MAX_SWAP
 
 #endif /* _LIMITS_H_ */

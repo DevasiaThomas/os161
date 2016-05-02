@@ -117,7 +117,6 @@ paddr_t ram_getfirstfree(void);
  */
 
 struct tlbshootdown {
-    struct addrspace *ts_as;
     vaddr_t ts_vaddr;
 };
 
