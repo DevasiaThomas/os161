@@ -82,6 +82,7 @@ extern struct bitmap *swapmap;
 extern struct lock *lock_pte;
 extern struct lock *lock_swap;
 extern struct lock *lock_copy;
+extern struct lock *lock_tlb;
 extern struct cv *cv_pte;
 extern struct semaphore *sem_tlb;
 

@@ -1183,6 +1183,7 @@ tlbshootdown(vaddr_t vaddr, int cpuid) {
     if(cpuid == -1) {
 	return;
     }
+    lock_acquire(lock_tlb);
     struct cpu *cpu;
     struct tlbshootdown tlbshootdown_temp;
     tlbshootdown_temp.ts_vaddr = vaddr;
@@ -1195,6 +1196,7 @@ tlbshootdown(vaddr_t vaddr, int cpuid) {
         vm_tlbshootdown(&tlbshootdown_temp);
 	P(sem_tlb);
     }
+    lock_release(lock_tlb);
 }
 
 void

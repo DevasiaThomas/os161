@@ -34,6 +34,7 @@ struct lock *lock_swap;
 struct lock *lock_copy;
 struct semaphore *sem_tlb;
 int num_swap = 0;
+struct lock *lock_tlb;
 
 bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
 
@@ -85,6 +86,7 @@ swap_bootstrap()
     lock_swap = lock_create("lock_swap");
     sem_tlb = sem_create("sem_tlb",0);
     lock_copy = lock_create("lock_copy");
+    lock_tlb = lock_create("lt");
 }
 
 paddr_t
@@ -115,10 +117,8 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct page_table_entry *pte)
                     for(unsigned j = i; j < i + npages; j++) {
                         if(coremap[j].page_state == PS_FIXED
                             || coremap[j].page_state == PS_VICTIM) {
-			    if(coremap[j].pte != NULL && lock_do_i_hold(coremap[j].pte->pte_lock)) {
                             	available = false;
-			    }
-                            break;
+                                break;
                         }
                     }
                     if(available) {
@@ -275,7 +275,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     faultaddress &= PAGE_FRAME;
 
     //check if valid address
-    int permission;// = AS_WRITEABLE;
+    int permission;// = AS_WRITEABLE | AS_READABLE;
     bool valid = check_if_valid(faultaddress,as,&permission);
     if(!valid) {
         return EFAULT;
@@ -329,7 +329,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         else if(pte->paddr == 0) {
             return ENOMEM;
         }
-        coremap[pte->paddr/PAGE_SIZE].page_state = PS_CLEAN;
     }
 
     int spl = splhigh();
@@ -340,9 +339,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
         elo = pte->paddr | TLBLO_DIRTY | TLBLO_VALID;
     }
-    //else {
-    //    elo = pte->paddr | TLBLO_VALID;
-    //}
 
     //coremap[pte->paddr/PAGE_SIZE].recent = true;
     coremap[pte->paddr/PAGE_SIZE].cpu = curcpu->c_number;
@@ -354,6 +350,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         tlb_random(ehi,elo);
     }
 
+    coremap[pte->paddr/PAGE_SIZE].page_state = PS_CLEAN;
     splx(spl);
     lock_release(pte->pte_lock);
     return 0;
