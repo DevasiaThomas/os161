@@ -895,33 +895,32 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
 void
 free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr)
 {
-    struct page_table_entry *t_pte = as->page_table;
+    /*struct page_table_entry *t_pte = as->page_table;
     struct page_table_entry *t_prev;
     while(t_pte) {
-        if(t_pte->vaddr >= (start_addr & PAGE_FRAME) && t_pte->vaddr <= (end_addr & PAGE_FRAME)) {
-            if(t_pte->next == NULL) {
-                t_prev->next = NULL;
-                int index = tlb_probe(t_pte->vaddr,0);
-                if(index > 0) {
-                    tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
-                }
-                kfree(t_pte);
-                break;
-            }
+        if(t_pte->vaddr >= (start_addr & PAGE_FRAME) && t_pte->vaddr < (end_addr & PAGE_FRAME)) {
             int index = tlb_probe(t_pte->vaddr,0);
             if(index > 0) {
-                tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
+            	tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
+            }  
+	    if(t_pte->next == NULL) {
+		page_free(t_pte);
+                kfree(t_pte);
+                t_prev->next = NULL;
+                break;
             }
+            
             struct page_table_entry *temp = t_pte->next;
             t_pte->vaddr = t_pte->next->vaddr;
             t_pte->paddr = t_pte->next->paddr;
             t_pte->next = t_pte->next->next;
+	    page_free(temp);
             kfree(temp);
         }
         t_prev = t_pte;
         t_pte = t_pte->next;
-    }
-    /*for(vaddr_t i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
-        free_pte(as,i);
     }*/
+    for(vaddr_t i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
+        free_pte(as,i);
+    }
 }

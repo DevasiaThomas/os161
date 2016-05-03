@@ -83,7 +83,6 @@ swap_bootstrap()
         swap_enable = true;
     }
 
-    swap_enable = false;
     swapmap = bitmap_create(MAX_SWAP);
     lock_swap = lock_create("lock_swap");
     sem_tlb = sem_create("sem_tlb",0);
