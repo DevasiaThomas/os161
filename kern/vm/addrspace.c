@@ -65,12 +65,27 @@ free_page_table(struct page_table_entry **pte) {
     }
     struct page_table_entry *t_pte = *pte;
     while(t_pte != NULL) {
-        lock_acquire(t_pte->pte_lock);
         struct page_table_entry *temp = t_pte->next;
-        page_free(t_pte);
-        lock_release(t_pte->pte_lock);
-        lock_destroy(t_pte->pte_lock);
-        t_pte->pte_lock = NULL;
+        if(swap_enable) {
+            lock_acquire(t_pte->pte_lock);
+
+            /*if(t_pte->on_disk) {
+                goto nowait;
+            }
+            while(t_pte->paddr !=0 && coremap[t_pte->paddr/PAGE_SIZE].busy == true) {
+                cv_wait(t_pte->pte_cv,t_pte->pte_lock);
+            }
+            nowait:*/
+            page_free(t_pte);
+            lock_release(t_pte->pte_lock);
+            lock_destroy(t_pte->pte_lock);
+            cv_destroy(t_pte->pte_cv);
+            t_pte->pte_cv = NULL;
+            t_pte->pte_lock = NULL;
+        }
+        else {
+            page_free(t_pte);
+        }
         kfree(t_pte);
         t_pte = temp;
     }
@@ -170,7 +185,21 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
             head = true;
             t_newpte->swap_index = -1;
             t_newpte->on_disk = false;
-
+            if(!swap_enable) {
+                t_newpte->vaddr = t_oldpte->vaddr;
+                if(t_oldpte->paddr != 0) {
+                    t_newpte->paddr = page_alloc(1,t_newpte->vaddr,t_newpte);
+                    if(t_newpte->paddr == 0) {
+                        kfree(t_newpte);
+                        return ENOMEM;
+                    }
+                    memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                }
+                else{
+                    t_newpte->paddr = 0;
+                }
+                goto noswap;
+            }
             lock_acquire(t_oldpte->pte_lock);
             t_newpte->vaddr = t_oldpte->vaddr;
             if(t_oldpte->paddr != 0) {
@@ -258,6 +287,13 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 kfree(t_newpte);
                 return ENOMEM;
             }
+            t_newpte->pte_cv = cv_create("pc");
+            if(t_newpte->pte_cv == NULL) {
+                lock_destroy(t_newpte->pte_lock);
+                kfree(t_newpte);
+                return ENOMEM;
+            }
+            noswap:
             t_newpte->next = NULL;
             new_as->page_table = t_newpte;
             t_oldpte = t_oldpte->next;
@@ -271,7 +307,21 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 
 	        temp->swap_index = -1;
 	        temp->on_disk = false;
-
+            if(!swap_enable) {
+                temp->vaddr = t_oldpte->vaddr;
+                if(t_oldpte->paddr != 0) {
+                    temp->paddr = page_alloc(1,temp->vaddr,temp);
+                    if(temp->paddr == 0) {
+                        kfree(temp);
+                        return ENOMEM;
+                    }
+                    memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                }
+                else{
+                    t_newpte->paddr = 0;
+                }
+                goto noswap1;
+            }
             lock_acquire(t_oldpte->pte_lock);
             temp->vaddr = t_oldpte->vaddr;
             if(t_oldpte->paddr != 0) {
@@ -353,12 +403,18 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 lock_release(lock_copy);
 	        }
             lock_release(t_oldpte->pte_lock);
-
             temp->pte_lock = lock_create("pl");
             if(temp->pte_lock == NULL) {
                 kfree(temp);
                 return ENOMEM;
             }
+            temp->pte_cv = cv_create("pc");
+            if(temp->pte_cv == NULL) {
+                lock_destroy(temp->pte_lock);
+                kfree(temp);
+                return ENOMEM;
+            }
+            noswap1:
             temp->next = NULL;
             t_newpte->next = temp;
             t_newpte = temp;
@@ -750,11 +806,22 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     temp->on_disk = false;
     temp->locked = false;
     temp->swap_index = -1;
+    if(!swap_enable) {
+        goto noswap2;
+    }
     temp->pte_lock = lock_create("pl");
     if(temp->pte_lock == NULL) {
          kfree(temp);
          return NULL;
     }
+    temp->pte_cv = cv_create("pc");
+    if(temp->pte_cv == NULL) {
+        lock_destroy(temp->pte_lock);
+        kfree(temp);
+        return NULL;
+    }
+
+    noswap2:
     temp->next = NULL;
     if(as->page_table == NULL) {
         as->page_table = temp;
@@ -828,7 +895,33 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
 void
 free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr)
 {
-    for(vaddr_t i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
-        free_pte(as,i);
+    struct page_table_entry *t_pte = as->page_table;
+    struct page_table_entry *t_prev;
+    while(t_pte) {
+        if(t_pte->vaddr >= (start_addr & PAGE_FRAME) && t_pte->vaddr <= (end_addr & PAGE_FRAME)) {
+            if(t_pte->next == NULL) {
+                t_prev->next = NULL;
+                int index = tlb_probe(t_pte->vaddr,0);
+                if(index > 0) {
+                    tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
+                }
+                kfree(t_pte);
+                break;
+            }
+            int index = tlb_probe(t_pte->vaddr,0);
+            if(index > 0) {
+                tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
+            }
+            struct page_table_entry *temp = t_pte->next;
+            t_pte->vaddr = t_pte->next->vaddr;
+            t_pte->paddr = t_pte->next->paddr;
+            t_pte->next = t_pte->next->next;
+            kfree(temp);
+        }
+        t_prev = t_pte;
+        t_pte = t_pte->next;
     }
+    /*for(vaddr_t i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
+        free_pte(as,i);
+    }*/
 }

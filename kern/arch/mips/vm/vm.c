@@ -62,7 +62,8 @@ vm_bootstrap()
         en.recent = false;
         en.block_size = 0;
         en.vaddr = 0;
-	en.cpu = -1;
+        en.cpu = -1;
+        en.busy = false;
         en.pte = NULL;
         coremap[i] = en;
     }
@@ -82,6 +83,7 @@ swap_bootstrap()
         swap_enable = true;
     }
 
+    swap_enable = false;
     swapmap = bitmap_create(MAX_SWAP);
     lock_swap = lock_create("lock_swap");
     sem_tlb = sem_create("sem_tlb",0);
@@ -128,6 +130,7 @@ page_alloc(unsigned npages, vaddr_t vaddr,struct page_table_entry *pte)
                             n_swap_pages++;
                         for(unsigned j = i; j < i + npages; j++) {
                             evict_page_state[j-i] = coremap[j].page_state;
+                            coremap[j].busy = true;
                             coremap[j].page_state = PS_VICTIM;
                         }
                         break;
@@ -313,8 +316,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         }
     }
 
-    lock_acquire(pte->pte_lock);
-
+    if(swap_enable) {
+        lock_acquire(pte->pte_lock);
+    }
     /* wait if swapping is going on */
 
     if(pte->paddr == 0) {
@@ -352,7 +356,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
     coremap[pte->paddr/PAGE_SIZE].page_state = PS_CLEAN;
     splx(spl);
-    lock_release(pte->pte_lock);
+    if(swap_enable) {
+        lock_release(pte->pte_lock);
+    }
     return 0;
 }
 
@@ -410,6 +416,7 @@ page_evict(unsigned index, int page_state)
 
     /* if page is free, no need for swapping */
     if(page_state == PS_FREE) {
+        coremap[index].busy = false;
         return 0;
     }
 
@@ -424,11 +431,14 @@ page_evict(unsigned index, int page_state)
     //if(page_state == PS_DIRTY) {
         int err = swap_out(evict_pte);
         if(err) {
+            coremap[index].busy = false;
             lock_release(evict_pte->pte_lock);
             return err;
         }
         evict_pte->on_disk = true;
     //}
+    coremap[index].busy = false;
+//    cv_signal(evict_pte->pte_cv,evict_pte->pte_lock);
     lock_release(evict_pte->pte_lock);
 
     return 0;
