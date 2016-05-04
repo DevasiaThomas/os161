@@ -412,14 +412,15 @@ page_evict(unsigned index, int page_state)
     tlbshootdown(coremap[index].vaddr,coremap[index].cpu);
 
     //write the page to disk if the page_state is dirty
-    if(page_state == PS_DIRTY) {
+    //if(page_state == PS_CLEAN) {
         int err = swap_out(evict_pte);
         if(err) {
             coremap[index].busy = false;
             lock_release(evict_pte->pte_lock);
             return err;
         }
-    }
+    //}
+    evict_pte->on_disk = true;
     coremap[index].busy = false;
     lock_release(evict_pte->pte_lock);
     (void)page_state;
