@@ -171,10 +171,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         return 0;
     }
 
-    struct page_table_entry *t_newpte = kmalloc(sizeof(struct page_table_entry));
-    if(t_newpte == NULL) {
-        return ENOMEM;
-    }
+    struct page_table_entry *t_newpte;
 
     while(t_oldpte) {
         lock_acquire(t_oldpte->pte_lock);
@@ -184,20 +181,16 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
             lock_acquire(lock_copy);
             memmove(kbuf,(void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
             lock_acquire(lock_swap);
-            for(int i = 0; i < MAX_SWAP; i++) {
-                if(!bitmap_isset(swapmap,i)) {
-                    bitmap_mark(swapmap,i);
-                    temp->swap_index = i;
-                    temp->on_disk = true;
-                    break;
-               }
-            }
+            temp->swap_index = swap_top;
+            swap_top++;
             lock_release(lock_swap);
             struct iovec iov;
             struct uio kuio;
             KASSERT(t_oldpte->paddr != 0);
+            lock_acquire(disk_lock);
             uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
             int err = VOP_WRITE(swap_disk,&kuio);
+            lock_release(disk_lock);
             (void)err;
             temp->paddr = 0;
             lock_release(lock_copy);
@@ -205,23 +198,19 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         else {
             lock_acquire(lock_copy);
             lock_acquire(lock_swap);
-            for(int i = 0; i < MAX_SWAP; i++) {
-                if(!bitmap_isset(swapmap,i)) {
-                    bitmap_mark(swapmap,i);
-                    temp->swap_index = i;
-                    temp->on_disk = true;
-                    break;
-               }
-            }
+            temp->swap_index = swap_top;
+            swap_top++;
             lock_release(lock_swap);
-
+            lock_acquire(disk_lock);
             struct iovec iov;
             struct uio kuio;
             uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
             int err = VOP_READ(swap_disk,&kuio);
-
+            lock_release(disk_lock);
+            lock_acquire(disk_lock);
             uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
             err = VOP_WRITE(swap_disk,&kuio);
+            lock_release(disk_lock);
             (void)err;
             temp->paddr = 0;
             lock_release(lock_copy);
@@ -611,7 +600,7 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
 
     temp->vaddr = vaddr & PAGE_FRAME;
-    temp->paddr = paddr;
+    temp->paddr = 0;
     as->page_table[top_index][second_index][third_index][forth_index] = temp;
 
     return temp; */
@@ -629,13 +618,8 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
          return NULL;
     }
     lock_acquire(lock_swap);
-    for(int i = 0; i < MAX_SWAP; i++) {
-        if(!bitmap_isset(swapmap,i)) {
-            bitmap_mark(swapmap,i);
-            temp->swap_index = i;
-            break;
-        }
-    }
+    temp->swap_index = swap_top;
+    swap_top++;
     lock_release(lock_swap);
 
     temp->next = NULL;

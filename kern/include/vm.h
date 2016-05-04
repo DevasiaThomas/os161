@@ -86,6 +86,8 @@ extern struct lock *lock_copy;
 extern struct lock *lock_tlb;
 extern struct cv *cv_pte;
 extern struct semaphore *sem_tlb;
+extern struct lock *disk_lock;
+extern int swap_top;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
