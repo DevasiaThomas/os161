@@ -65,6 +65,7 @@ free_page_table(struct page_table_entry **pte) {
         return;
     }
     struct page_table_entry *t_pte = *pte;
+    *pte = NULL;
     while(t_pte != NULL) {
         struct page_table_entry *temp = t_pte->next;
         lock_acquire(t_pte->pte_lock);
@@ -76,13 +77,13 @@ free_page_table(struct page_table_entry **pte) {
             thread_yield();
             lock_acquire(t_pte->pte_lock);
         }
+        KASSERT(coremap[t_pte->paddr/4096].busy == false);
         page_free(t_pte);
         nowait:
         lock_release(t_pte->pte_lock);
         lock_destroy(t_pte->pte_lock);
         t_pte->pte_lock = NULL;
         kfree(t_pte);
-        *t_pte = null;
         t_pte = temp;
     }
     *pte = NULL;
@@ -181,6 +182,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         temp->vaddr = t_oldpte->vaddr;
         if(!t_oldpte->on_disk) {
             lock_acquire(lock_copy);
+            memmove(kbuf,(void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
             lock_acquire(lock_swap);
             for(int i = 0; i < MAX_SWAP; i++) {
                 if(!bitmap_isset(swapmap,i)) {
@@ -188,12 +190,13 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     temp->swap_index = i;
                     temp->on_disk = true;
                     break;
-                }
+               }
             }
             lock_release(lock_swap);
             struct iovec iov;
             struct uio kuio;
-            uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
+            KASSERT(t_oldpte->paddr != 0);
+            uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
             int err = VOP_WRITE(swap_disk,&kuio);
             (void)err;
             temp->paddr = 0;
@@ -208,7 +211,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     temp->swap_index = i;
                     temp->on_disk = true;
                     break;
-                }
+               }
             }
             lock_release(lock_swap);
 
@@ -226,7 +229,6 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         temp->pte_lock = lock_create("pl");
         if(temp->pte_lock == NULL) {
             lock_release(t_oldpte->pte_lock);
-            kfree(temp);
             return ENOMEM;
         }
         temp->next = NULL;
@@ -635,6 +637,7 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
         }
     }
     lock_release(lock_swap);
+
     temp->next = NULL;
     if(as->page_table == NULL) {
         as->page_table = temp;
@@ -709,6 +712,31 @@ free_pte(struct addrspace *as, vaddr_t vaddr)
 void
 free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr)
 {
+    /*struct page_table_entry *t_pte = as->page_table;
+    struct page_table_entry *t_prev;
+    while(t_pte) {
+        if(t_pte->vaddr >= (start_addr & PAGE_FRAME) && t_pte->vaddr < (end_addr & PAGE_FRAME)) {
+            int index = tlb_probe(t_pte->vaddr,0);
+            if(index > 0) {
+            	tlb_write(TLBHI_INVALID(index),TLBLO_INVALID(),index);
+            }
+	    if(t_pte->next == NULL) {
+		page_free(t_pte);
+                kfree(t_pte);
+                t_prev->next = NULL;
+                break;
+            }
+
+            struct page_table_entry *temp = t_pte->next;
+            t_pte->vaddr = t_pte->next->vaddr;
+            t_pte->paddr = t_pte->next->paddr;
+            t_pte->next = t_pte->next->next;
+	    page_free(temp);
+            kfree(temp);
+        }
+        t_prev = t_pte;
+        t_pte = t_pte->next;
+    }*/
     for(vaddr_t i = (start_addr & PAGE_FRAME); i < (end_addr & PAGE_FRAME); i+=PAGE_SIZE) {
         free_pte(as,i);
     }

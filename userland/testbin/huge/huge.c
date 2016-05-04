@@ -54,7 +54,7 @@ main(void)
 {
 	int i,j;
 
-	tprintf("Entering the huge program - I will stress test your VM\n");
+//	tprintf("Entering the huge program - I will stress test your VM\n");
 
 	/* move number in so that sparse[i][0]=i */
 	for (i=0; i<NumPages; i++) {
