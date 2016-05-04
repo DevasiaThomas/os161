@@ -116,7 +116,9 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 
     struct proc* cur = curproc;
     struct process_descriptor *pdesc = process_table[curproc->pid];
-	if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
+	kprintf("Fatal user mode trap %u sig %d (%s, epc 0x%x, vaddr 0x%x)\n",
+		code, sig, trapcodenames[code], epc, vaddr);
+    if((pdesc->ppid == -1)||( pdesc->ppid != 0 && ((process_table[pdesc->ppid] == NULL)||(WIFEXITED(process_table[pdesc->ppid]->exit_status))))){//orphan process
 		proc_destroy(cur);
 		destroy_pdesc(pdesc);
 		pdesc = process_table[curproc->pid] = NULL;
@@ -133,10 +135,8 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 	 * You will probably want to change this.
 	 */
 
-    /*
-	kprintf("Fatal user mode trap %u sig %d (%s, epc 0x%x, vaddr 0x%x)\n",
-		code, sig, trapcodenames[code], epc, vaddr);
-	panic("I don't know how to handle this\n");*/
+
+/*		panic("I don't know how to handle this\n");*/
 }
 
 /*

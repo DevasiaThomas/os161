@@ -65,6 +65,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 
 struct coremap_entry {
     bool recent:1;
+    bool busy:1;
     unsigned page_state;
     unsigned block_size;
     int cpu;

@@ -51,7 +51,6 @@ struct vnode;
 
 struct page_table_entry{
     bool on_disk:1;
-    bool locked:1;
     int swap_index;
     vaddr_t vaddr;
     paddr_t paddr;

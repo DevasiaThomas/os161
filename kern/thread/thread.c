@@ -1183,20 +1183,20 @@ tlbshootdown(vaddr_t vaddr, int cpuid) {
     if(cpuid == -1) {
 	return;
     }
-    lock_acquire(lock_tlb);
+    //lock_acquire(lock_tlb);
     struct cpu *cpu;
     struct tlbshootdown tlbshootdown_temp;
     tlbshootdown_temp.ts_vaddr = vaddr;
     cpu = cpuarray_get(&allcpus,cpuid);
     if(cpu != curcpu->c_self) {
         ipi_tlbshootdown(cpu ,&tlbshootdown_temp);
-	P(sem_tlb);
+	//P(sem_tlb);
     }
     else {
         vm_tlbshootdown(&tlbshootdown_temp);
-	P(sem_tlb);
+	//P(sem_tlb);
     }
-    lock_release(lock_tlb);
+    //lock_release(lock_tlb);
 }
 
 void

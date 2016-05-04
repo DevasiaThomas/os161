@@ -89,7 +89,7 @@
 #define __PIPE_BUF      512
 
 /* Max number of pages that can be swapped */
-#define __MAX_SWAP      2048
+#define __MAX_SWAP      4096
 
 
 /*
