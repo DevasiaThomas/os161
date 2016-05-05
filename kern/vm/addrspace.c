@@ -32,6 +32,7 @@
 #include <lib.h>
 #include <spl.h>
 #include <addrspace.h>
+#include <bitmap.h>
 #include <vfs.h>
 #include <vnode.h>
 #include <synch.h>
@@ -80,7 +81,8 @@ free_page_table(struct page_table_entry **pte) {
             if(t_pte->on_disk == true) {
                 goto nowait;
             }
-            while(coremap[t_pte->paddr/4096].busy == true) {
+            unsigned index = t_pte->paddr/PAGE_SIZE;
+            while(coremap[index].busy == true) {
                  lock_release(t_pte->p_lock);
                  thread_yield();
                  lock_acquire(t_pte->p_lock);
@@ -236,14 +238,19 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 lock_acquire(t_oldpte->p_lock);
                 if(t_oldpte->on_disk == false) {
                     lock_acquire(lock_copy);
-                    lock_acquire(lock_swap);
-                    t_newpte->swap_index = swap_top;
-                    swap_top++;
-                    lock_release(lock_swap);
+                    spinlock_acquire(&lock_swap);
+                    unsigned si;
+                    int err = bitmap_alloc(swapmap, &si);
+                    if(err == 0) {
+                        panic("bitmap_alloc failed");
+                    }
+                    t_newpte->swap_index = si;
+                    spinlock_release(&lock_swap);
+                    check_coremap(t_newpte->swap_index, -1);
                     struct iovec iov;
                     struct uio kuio;
                     uio_kinit(&iov,&kuio,(void*)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE,t_newpte->swap_index*PAGE_SIZE,UIO_WRITE);
-                    int err = VOP_WRITE(swap_disk,&kuio);
+                    err = VOP_WRITE(swap_disk,&kuio);
                     (void)err;
                     t_newpte->paddr = 0;
                     t_newpte->on_disk = true;
@@ -251,16 +258,22 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 	            }
 	            else {
                     lock_acquire(lock_copy);
-                    lock_acquire(lock_swap);
-                    t_newpte->swap_index = swap_top;
-                    swap_top++;
-                    lock_release(lock_swap);
+                    spinlock_acquire(&lock_swap);
+                    unsigned si;
+                    int err = bitmap_alloc(swapmap, &si);
+                    if(err == 0) {
+                        panic("bitmap_alloc failed");
+                    }
+                    t_newpte->swap_index = si;
+                    spinlock_release(&lock_swap);
 	                t_newpte->paddr = 0;
                     struct iovec iov;
                     struct uio kuio;
                     KASSERT(t_oldpte->on_disk == true);
+                    check_coremap(t_newpte->swap_index, -1);
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
-                    int err = VOP_READ(swap_disk,&kuio);
+                    KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) == true);
+                    err = VOP_READ(swap_disk,&kuio);
 
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_newpte->swap_index*PAGE_SIZE,UIO_WRITE);
                     err = VOP_WRITE(swap_disk,&kuio);
@@ -283,14 +296,19 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 lock_acquire(t_oldpte->p_lock);
                 if(t_oldpte->on_disk == false) {
                     lock_acquire(lock_copy);
-                    lock_acquire(lock_swap);
-                    temp->swap_index = swap_top;
-                    swap_top++;
-                    lock_release(lock_swap);
+                    spinlock_acquire(&lock_swap);
+                    unsigned si;
+                    int err = bitmap_alloc(swapmap, &si);
+                    if(err == 0) {
+                        panic("bitmap_alloc failed");
+                    }
+                    temp->swap_index = si;
+                    spinlock_release(&lock_swap);
                     struct iovec iov;
+                    check_coremap(temp->swap_index, -1);
                     struct uio kuio;
                     uio_kinit(&iov,&kuio,(void*)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
-                    int err = VOP_WRITE(swap_disk,&kuio);
+                    err = VOP_WRITE(swap_disk,&kuio);
                     (void)err;
                     temp->paddr = 0;
                     temp->on_disk = true;
@@ -299,16 +317,22 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 }
                 else {
                     lock_acquire(lock_copy);
-                    lock_acquire(lock_swap);
-                    temp->swap_index = swap_top;
-                    swap_top++;
-                    lock_release(lock_swap);
-                    temp->paddr = 0;
+                    spinlock_acquire(&lock_swap);
+                    unsigned si;
+                    int err = bitmap_alloc(swapmap, &si);
+                    if(err == 0) {
+                        panic("bitmap_alloc failed");
+                    }
 
+                    temp->swap_index = si;
+                    spinlock_release(&lock_swap);
+                    temp->paddr = 0;
+                    check_coremap(temp->swap_index, -1);
                     struct iovec iov;
                     struct uio kuio;
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
-                    int err = VOP_READ(swap_disk,&kuio);
+                    KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) != true);
+                    err = VOP_READ(swap_disk,&kuio);
 
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
                     err = VOP_WRITE(swap_disk,&kuio);
@@ -712,10 +736,15 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
         goto noswap;
     }
     temp->p_lock = lock_create("pl");
-    lock_acquire(lock_swap);
-    temp->swap_index = swap_top;
-    swap_top++;
-    lock_release(lock_swap);
+    temp->swap_index = -1;
+    spinlock_acquire(&lock_swap);
+    unsigned si;
+    int err = bitmap_alloc(swapmap, &si);
+    if(err == 0) {
+        panic("bitmap_alloc failed");
+    }
+    temp->swap_index = si;
+    spinlock_release(&lock_swap);
     temp->on_disk = false;
 
     noswap:

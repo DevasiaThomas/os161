@@ -64,7 +64,7 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 
 struct coremap_entry {
     bool busy:1;
-    bool receint:1;
+    bool recent:1;
     int cpu;
     unsigned page_state;
     unsigned block_size;
@@ -76,10 +76,11 @@ extern struct spinlock splk_coremap;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
 extern struct lock *lock_copy;
-extern struct lock *lock_swap;
+extern struct spinlock lock_swap;
 extern int swap_top;
 extern bool swap_enable;
 extern struct vnode *swap_disk;
+extern struct bitmap *swapmap;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
@@ -99,5 +100,6 @@ void debug_vm(void);
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);
 
+void check_coremap(int swapslot, int index);
 
 #endif /* _VM_H_ */

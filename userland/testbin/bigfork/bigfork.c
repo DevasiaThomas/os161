@@ -106,7 +106,7 @@ mul(int *x, const int *a, const int *b)
 		for (j=0; j<DIM; j++) {
 			x[i*DIM+j] = 0;
 			for (k=0; k<DIM; k++) {
-				x[i*DIM+j] += a[i*DIM+k] * b[k*DIM+j]; 
+				x[i*DIM+j] += a[i*DIM+k] * b[k*DIM+j];
 			}
 		}
 	}
