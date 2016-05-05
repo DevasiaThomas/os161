@@ -1258,7 +1258,7 @@ void thread_wait_for_count(unsigned tc)
 	spinlock_release(&thread_count_lock);
 }
 
-int get_cpunum()
+struct cpu* get_cpu(int index)
 {
-	return cpuarray_num(&allcpus);
+	return cpuarray_get(&allcpus,index);
 }

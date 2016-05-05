@@ -170,7 +170,7 @@ void ipi_broadcast(int code);
 void ipi_tlbshootdown(struct cpu *target, const struct tlbshootdown *mapping);
 void tlbshootdown(vaddr_t vaddr, int cpuid);
 
-int get_cpunum(void);
+struct cpu *get_cpu(int index);
 
 void interprocessor_interrupt(void);
 

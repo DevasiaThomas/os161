@@ -161,7 +161,7 @@ void free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr);
 
 int load_elf(struct vnode *v, vaddr_t *entrypoint);
 
-paddr_t page_alloc(unsigned npages, vaddr_t vaddr, struct page_table_entry *pte);
+paddr_t page_alloc(unsigned npages, struct page_table_entry *pte);
 void page_free(struct page_table_entry *);
 
 int swap_in(struct page_table_entry *pte);

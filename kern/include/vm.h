@@ -66,10 +66,11 @@ int vm_fault(int faulttype, vaddr_t faultaddress);
 struct coremap_entry {
     bool recent:1;
     bool busy:1;
-    unsigned page_state;
+    bool fixed:1;
+    bool dirty:1;
+    bool free:1;
     unsigned block_size;
     int cpu;
-    vaddr_t vaddr;
     struct page_table_entry *pte;
 };
 
@@ -94,7 +95,7 @@ vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
 /* swapping functions */
-int page_evict(unsigned index,int page_state);
+int page_evict(unsigned index);
 
 
 /*
