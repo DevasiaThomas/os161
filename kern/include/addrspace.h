@@ -50,8 +50,11 @@
 struct vnode;
 
 struct page_table_entry{
+    bool on_disk:1;
     vaddr_t vaddr;
     paddr_t paddr;
+    int swap_index;
+    struct lock *p_lock;
     struct page_table_entry * next;
 };
 
@@ -160,5 +163,6 @@ void free_pages(struct addrspace *as, vaddr_t start_addr, vaddr_t end_addr);
 
 int load_elf(struct vnode *v, vaddr_t *entrypoint);
 
+paddr_t alloc_upages(struct page_table_entry *pte);
 
 #endif /* _ADDRSPACE_H_ */

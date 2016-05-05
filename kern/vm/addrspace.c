@@ -32,7 +32,13 @@
 #include <lib.h>
 #include <spl.h>
 #include <addrspace.h>
+#include <vfs.h>
+#include <vnode.h>
+#include <synch.h>
+#include <thread.h>
 #include <machine/tlb.h>
+#include <vnode.h>
+#include <uio.h>
 #include <vm.h>
 #include <proc.h>
 
@@ -51,17 +57,42 @@ void free_page_table(struct page_table_entry **);
 int copy_regions(struct addrspace *, struct region_entry **);
 void free_pte(struct addrspace *as, vaddr_t vaddr);
 
+char kbuf[PAGE_SIZE];
+
 void
 free_page_table(struct page_table_entry **pte) {
     if(pte == NULL) {
         return;
     }
     struct page_table_entry *t_pte = *pte;
-    while(t_pte != NULL) {
-        struct page_table_entry *temp = t_pte->next;
-	page_free(t_pte->paddr);
-        kfree(t_pte);
-        t_pte = temp;
+    if(swap_enable == false) {
+        while(t_pte != NULL) {
+            struct page_table_entry *temp = t_pte->next;
+            page_free(t_pte->paddr);
+            kfree(t_pte);
+            t_pte = temp;
+        }
+    }
+    else {
+        while(t_pte != NULL) {
+            struct page_table_entry *temp = t_pte->next;
+            lock_acquire(t_pte->p_lock);
+            if(t_pte->on_disk == true) {
+                goto nowait;
+            }
+            while(coremap[t_pte->paddr/4096].busy == true) {
+                 lock_release(t_pte->p_lock);
+                 thread_yield();
+                 lock_acquire(t_pte->p_lock);
+            }
+            page_free(t_pte->paddr);
+            nowait:
+            lock_release(t_pte->p_lock);
+            lock_destroy(t_pte->p_lock);
+            kfree(t_pte);
+            t_pte = temp;
+        }
+
     }
     *pte = NULL;
     return;
@@ -151,54 +182,150 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         return ENOMEM;
     }
 
-    do {
-        if(head == false) {
-            head = true;
-            t_newpte->vaddr = t_oldpte->vaddr;
-            if(t_oldpte->paddr != 0) {
-		t_newpte->paddr = page_alloc(1,t_newpte->vaddr,new_as);
-                if(t_newpte->paddr == 0) {
-			kfree(t_newpte);
-                	return ENOMEM;
-                }
+    if(swap_enable == false) {
+        do {
+            if(head == false) {
+                head = true;
+                t_newpte->vaddr = t_oldpte->vaddr;
+                if(t_oldpte->on_disk == false) {
+	            t_newpte->paddr = alloc_upages(t_newpte);
+                    if(t_newpte->paddr == 0) {
+	                    kfree(t_newpte);
+                        return ENOMEM;
+                    }
                 memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
                 coremap[t_newpte->paddr/PAGE_SIZE].page_state = PS_DIRTY;
-
-	    }
-	    else {
-		t_newpte->paddr = 0;
-	    }
-            t_newpte->next = NULL;
-            new_as->page_table = t_newpte;
-            t_oldpte = t_oldpte->next;
-        }
-        else {
-            struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
-            if(temp == NULL) {
-             //   free_page_table(&new_as->page_table);
-                return ENOMEM;
+	            }
+	            else {
+	                t_newpte->paddr = 0;
+	            }
+                t_newpte->next = NULL;
+                new_as->page_table = t_newpte;
+                t_oldpte = t_oldpte->next;
             }
-            temp->vaddr = t_oldpte->vaddr;
-            if(t_oldpte->paddr != 0) {
-		temp->paddr = page_alloc(1,t_newpte->vaddr,new_as);
-                if(temp->paddr == 0) {
-			kfree(temp);
-                	return ENOMEM;
+            else {
+                struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
+                if(temp == NULL) {
+                    return ENOMEM;
                 }
-                memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
-                coremap[temp->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+                temp->vaddr = t_oldpte->vaddr;
+                if(t_oldpte->paddr != 0) {
+                    temp->paddr = alloc_upages(t_newpte);
+                    if(temp->paddr == 0) {
+                        kfree(temp);
+                        return ENOMEM;
+                    }
+                    memmove((void *)PADDR_TO_KVADDR(temp->paddr),(const void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                    coremap[temp->paddr/PAGE_SIZE].page_state = PS_DIRTY;
+                }
+                else {
+                    temp->paddr = 0;
+                }
+                temp->next = NULL;
+                t_newpte->next = temp;
+                t_newpte = temp;
+                t_oldpte = t_oldpte->next;
+            }
+        } while(t_oldpte);
+    }
+    else {
+        do {
+            if(head == false) {
+                head = true;
+                t_newpte->vaddr = t_oldpte->vaddr;
+                lock_acquire(t_oldpte->p_lock);
+                if(t_oldpte->on_disk == false) {
+                    lock_acquire(lock_copy);
+                    lock_acquire(lock_swap);
+                    t_newpte->swap_index = swap_top;
+                    swap_top++;
+                    lock_release(lock_swap);
+                    struct iovec iov;
+                    struct uio kuio;
+                    uio_kinit(&iov,&kuio,(void*)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE,t_newpte->swap_index*PAGE_SIZE,UIO_WRITE);
+                    int err = VOP_WRITE(swap_disk,&kuio);
+                    (void)err;
+                    t_newpte->paddr = 0;
+                    t_newpte->on_disk = true;
+                    lock_release(lock_copy);
+	            }
+	            else {
+                    lock_acquire(lock_copy);
+                    lock_acquire(lock_swap);
+                    t_newpte->swap_index = swap_top;
+                    swap_top++;
+                    lock_release(lock_swap);
+	                t_newpte->paddr = 0;
+                    struct iovec iov;
+                    struct uio kuio;
+                    KASSERT(t_oldpte->on_disk == true);
+                    uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
+                    int err = VOP_READ(swap_disk,&kuio);
 
-	    }
-	    else {
-		temp->paddr = 0;
-	    }
-	    temp->next = NULL;
-            t_newpte->next = temp;
-            t_newpte = temp;
-            t_oldpte = t_oldpte->next;
-        }
-    } while(t_oldpte);
+                    uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_newpte->swap_index*PAGE_SIZE,UIO_WRITE);
+                    err = VOP_WRITE(swap_disk,&kuio);
+                    (void)err;
+                    t_newpte->on_disk = true;
+                    lock_release(lock_copy);
+	            }
+                lock_release(t_oldpte->p_lock);
+                t_newpte->p_lock = lock_create("pl");
+                t_newpte->next = NULL;
+                new_as->page_table = t_newpte;
+                t_oldpte = t_oldpte->next;
+            }
+            else {
+                struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
+                if(temp == NULL) {
+                    return ENOMEM;
+                }
+                temp->vaddr = t_oldpte->vaddr;
+                lock_acquire(t_oldpte->p_lock);
+                if(t_oldpte->on_disk == false) {
+                    lock_acquire(lock_copy);
+                    lock_acquire(lock_swap);
+                    temp->swap_index = swap_top;
+                    swap_top++;
+                    lock_release(lock_swap);
+                    struct iovec iov;
+                    struct uio kuio;
+                    uio_kinit(&iov,&kuio,(void*)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
+                    int err = VOP_WRITE(swap_disk,&kuio);
+                    (void)err;
+                    temp->paddr = 0;
+                    temp->on_disk = true;
+                    lock_release(lock_copy);
 
+                }
+                else {
+                    lock_acquire(lock_copy);
+                    lock_acquire(lock_swap);
+                    temp->swap_index = swap_top;
+                    swap_top++;
+                    lock_release(lock_swap);
+                    temp->paddr = 0;
+
+                    struct iovec iov;
+                    struct uio kuio;
+                    uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
+                    int err = VOP_READ(swap_disk,&kuio);
+
+                    uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
+                    err = VOP_WRITE(swap_disk,&kuio);
+                    (void)err;
+                    temp->on_disk = true;
+                    lock_release(lock_copy);
+                }
+                lock_release(t_oldpte->p_lock);
+                temp->p_lock = lock_create("pl");
+                temp->next = NULL;
+                t_newpte->next = temp;
+                t_newpte = temp;
+                t_oldpte = t_oldpte->next;
+
+            }
+        } while(t_oldpte);
+    }
 //	(void)old_as;
 //	(void)new_as;
 //	return ENOMEM;
@@ -580,6 +707,18 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
     temp->vaddr = vaddr & PAGE_FRAME;
     temp->paddr = paddr;
+
+    if(swap_enable == false) {
+        goto noswap;
+    }
+    temp->p_lock = lock_create("pl");
+    lock_acquire(lock_swap);
+    temp->swap_index = swap_top;
+    swap_top++;
+    lock_release(lock_swap);
+    temp->on_disk = false;
+
+    noswap:
     temp->next = NULL;
     if(as->page_table == NULL) {
         as->page_table = temp;

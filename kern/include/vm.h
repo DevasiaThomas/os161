@@ -54,32 +54,37 @@
 /* Initialization function */
 void vm_bootstrap(void);
 
+void swap_bootstrap(void);
+
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
 
-/* Check if valid address */
-bool check_if_valid(vaddr_t vaddr, struct addrspace *as, int *permission);
 
 /* coremap_entry */
 
 struct coremap_entry {
+    bool busy:1;
+    bool receint:1;
+    int cpu;
     unsigned page_state;
     unsigned block_size;
-    vaddr_t vaddr;
-    struct addrspace *as;
+    struct page_table_entry *pte;
 };
 
 extern struct coremap_entry *coremap;
 extern struct spinlock splk_coremap;
-extern struct spinlock splk_copy;
 extern unsigned num_total_page;
 extern unsigned num_allocated_pages;
+extern struct lock *lock_copy;
+extern struct lock *lock_swap;
+extern int swap_top;
+extern bool swap_enable;
+extern struct vnode *swap_disk;
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(unsigned npages);
 void free_kpages(vaddr_t addr);
 
-paddr_t page_alloc(unsigned npages, vaddr_t vaddr, struct addrspace *as);
 void page_free(paddr_t paddr);
 /*
  * Return amount of memory (in bytes) used by allocated coremap pages.  If
