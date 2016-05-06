@@ -192,6 +192,10 @@ alloc_kpages(unsigned npages)
             lock_release(coremap[j].pte->p_lock);
             coremap[j].pte = (void *)0xdeadbeef;
         }
+        else {
+            coremap[j].page_state = PS_FIXED;
+            coremap[j].block_size = npages;
+        }
     }
 
     return PADDR_TO_KVADDR(pa);
@@ -453,7 +457,12 @@ alloc_upages(struct page_table_entry *pte)
         lock_release(coremap[j].pte->p_lock);
         KASSERT(pte != NULL);
     }
-    coremap[j].pte = pte;
+    else {
+        coremap[j].block_size = 1;
+        coremap[j].page_state = PS_VICTIM;
+        coremap[j].pte = pte;
+    }
+
     return pa;
 }
 
