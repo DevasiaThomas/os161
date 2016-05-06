@@ -168,7 +168,6 @@ alloc_kpages(unsigned npages)
     spinlock_release(&splk_coremap);
     for(unsigned j = start_index; j < start_index + npages; j++) {
         if(swap_enable && evict_states[j-start_index] != PS_FREE) {
-            num_allocated_pages--;
             lock_acquire(coremap[j].pte->p_lock);
             struct tlbshootdown ts;
             ts.ts_vaddr = coremap[j].pte->vaddr;
@@ -190,11 +189,13 @@ alloc_kpages(unsigned npages)
 
             bzero((void *)PADDR_TO_KVADDR(j*PAGE_SIZE),PAGE_SIZE);
             lock_release(coremap[j].pte->p_lock);
-            coremap[j].pte = (void *)0xdeadbeef;
+            coremap[j].pte = NULL;
         }
         else {
             coremap[j].page_state = PS_FIXED;
             coremap[j].block_size = npages;
+            coremap[j].pte = NULL;
+            bzero((void *)PADDR_TO_KVADDR(j*PAGE_SIZE),PAGE_SIZE);
         }
     }
 
@@ -455,12 +456,14 @@ alloc_upages(struct page_table_entry *pte)
 
         bzero((void *)PADDR_TO_KVADDR(pa), PAGE_SIZE);
         lock_release(coremap[j].pte->p_lock);
+        coremap[j].pte = pte;
         KASSERT(pte != NULL);
     }
     else {
         coremap[j].block_size = 1;
         coremap[j].page_state = PS_VICTIM;
         coremap[j].pte = pte;
+        bzero((void *)PADDR_TO_KVADDR(pa), PAGE_SIZE);
     }
 
     return pa;
