@@ -125,6 +125,9 @@ alloc_kpages(unsigned npages)
                         for(unsigned j = i; j < i + npages; j++) {
                             KASSERT(coremap[i].page_state != PS_FIXED);
                             evict_states[j-i] = coremap[j].page_state;
+                            if(evict_states[j-i] != PS_FREE) {
+                                 num_allocated_pages--;
+                            }
                             coremap[j].page_state = PS_VICTIM;
                             coremap[j].busy = true;
                         }
@@ -182,15 +185,14 @@ alloc_kpages(unsigned npages)
                 panic("asdasdas");
             }
             coremap[j].pte->on_disk = true;
-            lock_release(coremap[j].pte->p_lock);
-        }
-        //coremap[j].recent = true;
-        coremap[j].page_state = PS_FIXED;
-        coremap[j].block_size = npages;
-        coremap[j].pte = NULL;
-    }
+            coremap[j].page_state = PS_FIXED;
+            coremap[j].block_size = npages;
 
-    bzero((void *)PADDR_TO_KVADDR(pa), npages*PAGE_SIZE);
+            bzero((void *)PADDR_TO_KVADDR(j*PAGE_SIZE),PAGE_SIZE);
+            lock_release(coremap[j].pte->p_lock);
+            coremap[j].pte = (void *)0xdeadbeef;
+        }
+    }
 
     return PADDR_TO_KVADDR(pa);
 }
@@ -204,6 +206,7 @@ page_free(paddr_t paddr)
     coremap[index].block_size = 0;
     coremap[index].pte= NULL;
     coremap[index].busy = false;
+    coremap[index].cpu = -1;
     num_allocated_pages--;
     spinlock_release(&splk_coremap);
 }
@@ -221,6 +224,7 @@ free_kpages(vaddr_t addr)
             coremap[i].page_state = PS_FREE;
             coremap[i].block_size = 0;
             coremap[i].busy = false;
+            coremap[i].cpu = -1;
         }
         spinlock_release(&splk_coremap);
     }
@@ -406,6 +410,9 @@ alloc_upages(struct page_table_entry *pte)
                 evict_page_state = coremap[i].page_state;
                 coremap[i].page_state = PS_VICTIM;
                 coremap[i].busy = true;
+                if(evict_page_state != PS_FREE) {
+                    num_allocated_pages--;
+                }
                 break;
             }
             else {
@@ -421,7 +428,8 @@ alloc_upages(struct page_table_entry *pte)
     spinlock_release(&splk_coremap);
 
     if(swap_enable && evict_page_state != PS_FREE) {
-        num_allocated_pages--;
+        KASSERT(pte!=NULL);
+        KASSERT(coremap[j].pte != NULL);
         lock_acquire(coremap[j].pte->p_lock);
         struct tlbshootdown ts;
         ts.ts_vaddr = coremap[j].pte->vaddr;
@@ -438,15 +446,14 @@ alloc_upages(struct page_table_entry *pte)
             panic("disk fail");
         }
         coremap[j].pte->on_disk = true;
+        coremap[j].page_state = PS_VICTIM;
+        coremap[j].block_size = 1;
+
+        bzero((void *)PADDR_TO_KVADDR(pa), PAGE_SIZE);
         lock_release(coremap[j].pte->p_lock);
+        KASSERT(pte != NULL);
     }
-    //coremap[j].recent = true;
-    coremap[j].page_state = PS_VICTIM;
-    coremap[j].block_size = 1;
     coremap[j].pte = pte;
-
-    bzero((void *)PADDR_TO_KVADDR(pa), PAGE_SIZE);
-
     return pa;
 }
 
