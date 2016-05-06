@@ -173,7 +173,7 @@ alloc_kpages(unsigned npages)
             ts.ts_vaddr = coremap[j].pte->vaddr;
             struct cpu* c = get_cpu(coremap[j].cpu);
             ipi_tlbshootdown(c,&ts);
-            if(evict_states[j-start_index] == PS_DIRTY) {
+            //if(evict_states[j-start_index] == PS_DIRTY) {
                 struct uio kuio;
                 struct iovec iov;
                 uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
@@ -184,7 +184,7 @@ alloc_kpages(unsigned npages)
                 if(err) {
                     panic("asdasdas");
                 }
-            }
+            //}
             coremap[j].pte->on_disk = true;
             coremap[j].page_state = PS_FIXED;
             coremap[j].block_size = npages;
@@ -452,7 +452,7 @@ alloc_upages(struct page_table_entry *pte)
         ts.ts_vaddr = coremap[j].pte->vaddr;
         struct cpu* c = get_cpu(coremap[j].cpu);
         ipi_tlbshootdown(c,&ts);
-        if(evict_page_state == PS_DIRTY) {
+        //if(evict_page_state == PS_DIRTY) {
             struct uio kuio;
             struct iovec iov;
             uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
@@ -463,7 +463,7 @@ alloc_upages(struct page_table_entry *pte)
             if(err) {
                 panic("disk fail");
             }
-        }
+        //}
         coremap[j].pte->on_disk = true;
         coremap[j].page_state = PS_VICTIM;
         coremap[j].block_size = 1;
