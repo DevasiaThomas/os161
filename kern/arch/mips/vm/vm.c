@@ -13,6 +13,7 @@
 #include <vnode.h>
 #include <uio.h>
 #include <proc.h>
+#include <stat.h>
 #include <current.h>
 #include <mips/tlb.h>
 #include <vfs.h>
@@ -73,14 +74,20 @@ swap_bootstrap()
     int err = vfs_open((char *)"lhd0raw:",O_RDWR,0664,&swap_disk);
     if(err) {
         swap_enable = false;
+        return;
     }
     else {
         swap_enable = true;
     }
 
+    struct stat f_stat;
+    VOP_STAT(swap_disk,&f_stat);
     lock_copy = lock_create("lc");
     spinlock_init(&lock_swap);
-    swapmap = bitmap_create(8192);
+    swapmap = bitmap_create(f_stat.st_size/PAGE_SIZE);
+    if(swapmap == NULL) {
+         panic("asdasd:");
+    }
 }
 
 vaddr_t
@@ -119,6 +126,7 @@ alloc_kpages(unsigned npages)
                             KASSERT(coremap[i].page_state != PS_FIXED);
                             evict_states[j-i] = coremap[j].page_state;
                             coremap[j].page_state = PS_VICTIM;
+                            coremap[j].busy = true;
                         }
                         break;
                     }
@@ -166,8 +174,13 @@ alloc_kpages(unsigned npages)
             struct uio kuio;
             struct iovec iov;
             uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
+            if(coremap[j].pte->swap_index != coremap[j].pte->dup) {
+                panic("si changed");
+            }
             int err = VOP_WRITE(swap_disk,&kuio);
-            (void)err;
+            if(err) {
+                panic("asdasdas");
+            }
             coremap[j].pte->on_disk = true;
             lock_release(coremap[j].pte->p_lock);
         }
@@ -187,10 +200,10 @@ page_free(paddr_t paddr)
 {
     spinlock_acquire(&splk_coremap);
     unsigned index = paddr/PAGE_SIZE;
-    KASSERT((coremap[index].page_state == PS_CLEAN) || (coremap[index].page_state == PS_DIRTY));
     coremap[index].page_state = PS_FREE;
     coremap[index].block_size = 0;
     coremap[index].pte= NULL;
+    coremap[index].busy = false;
     num_allocated_pages--;
     spinlock_release(&splk_coremap);
 }
@@ -207,6 +220,7 @@ free_kpages(vaddr_t addr)
         for(unsigned i = index; i < index + block_size; i++) {
             coremap[i].page_state = PS_FREE;
             coremap[i].block_size = 0;
+            coremap[i].busy = false;
         }
         spinlock_release(&splk_coremap);
     }
@@ -291,8 +305,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
             struct iovec iov;
             uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(pte->paddr),PAGE_SIZE,pte->swap_index*PAGE_SIZE,UIO_READ);
             KASSERT(bitmap_isset(swapmap,pte->swap_index) != false);
+            if(pte->swap_index != pte->dup) {
+                panic("si changed");
+            }
             int err = VOP_READ(swap_disk,&kuio);
-            (void)err;
+            if(err) {
+                panic("disk fail");
+            }
             pte->on_disk = false;
         }
         if(pte->paddr == 0) {
@@ -396,10 +415,11 @@ alloc_upages(struct page_table_entry *pte)
         i++;
     }
     pa = start_index * PAGE_SIZE;
+    int j = start_index;
     search_start = start_index + 1;
     num_allocated_pages += 1;
     spinlock_release(&splk_coremap);
-    int j = start_index;
+
     if(swap_enable && evict_page_state != PS_FREE) {
         num_allocated_pages--;
         lock_acquire(coremap[j].pte->p_lock);
@@ -410,8 +430,13 @@ alloc_upages(struct page_table_entry *pte)
         struct uio kuio;
         struct iovec iov;
         uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
+        if(coremap[j].pte->swap_index != coremap[j].pte->dup) {
+            panic("si changed");
+        }
         int err = VOP_WRITE(swap_disk,&kuio);
-        (void)err;
+        if(err) {
+            panic("disk fail");
+        }
         coremap[j].pte->on_disk = true;
         lock_release(coremap[j].pte->p_lock);
     }

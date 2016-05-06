@@ -82,12 +82,15 @@ free_page_table(struct page_table_entry **pte) {
                 goto nowait;
             }
             unsigned index = t_pte->paddr/PAGE_SIZE;
+            if(coremap[index].page_state != PS_VICTIM || coremap[index].busy == false) {
+                page_free(t_pte->paddr);
+                goto nowait;
+            }
             while(coremap[index].busy == true) {
                  lock_release(t_pte->p_lock);
                  thread_yield();
                  lock_acquire(t_pte->p_lock);
             }
-            page_free(t_pte->paddr);
             nowait:
             lock_release(t_pte->p_lock);
             lock_destroy(t_pte->p_lock);
@@ -201,6 +204,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
 	            else {
 	                t_newpte->paddr = 0;
 	            }
+                t_newpte->on_disk = false;
                 t_newpte->next = NULL;
                 new_as->page_table = t_newpte;
                 t_oldpte = t_oldpte->next;
@@ -223,6 +227,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 else {
                     temp->paddr = 0;
                 }
+                temp->on_disk = false;
                 temp->next = NULL;
                 t_newpte->next = temp;
                 t_newpte = temp;
@@ -234,17 +239,19 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
         do {
             if(head == false) {
                 head = true;
-                t_newpte->vaddr = t_oldpte->vaddr;
+
                 lock_acquire(t_oldpte->p_lock);
+                t_newpte->vaddr = t_oldpte->vaddr;
                 if(t_oldpte->on_disk == false) {
                     lock_acquire(lock_copy);
                     spinlock_acquire(&lock_swap);
                     unsigned si;
                     int err = bitmap_alloc(swapmap, &si);
-                    if(err == 0) {
+                    if(err > 0) {
                         panic("bitmap_alloc failed");
                     }
                     t_newpte->swap_index = si;
+                    t_newpte->dup = si;
                     spinlock_release(&lock_swap);
                     check_coremap(t_newpte->swap_index, -1);
                     struct iovec iov;
@@ -261,10 +268,11 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     spinlock_acquire(&lock_swap);
                     unsigned si;
                     int err = bitmap_alloc(swapmap, &si);
-                    if(err == 0) {
+                    if(err > 0) {
                         panic("bitmap_alloc failed");
                     }
                     t_newpte->swap_index = si;
+                    t_newpte->dup = si;
                     spinlock_release(&lock_swap);
 	                t_newpte->paddr = 0;
                     struct iovec iov;
@@ -272,7 +280,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     KASSERT(t_oldpte->on_disk == true);
                     check_coremap(t_newpte->swap_index, -1);
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
-                    KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) == true);
+                    KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) != false);
                     err = VOP_READ(swap_disk,&kuio);
 
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_newpte->swap_index*PAGE_SIZE,UIO_WRITE);
@@ -292,17 +300,18 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 if(temp == NULL) {
                     return ENOMEM;
                 }
-                temp->vaddr = t_oldpte->vaddr;
                 lock_acquire(t_oldpte->p_lock);
+                temp->vaddr = t_oldpte->vaddr;
                 if(t_oldpte->on_disk == false) {
                     lock_acquire(lock_copy);
                     spinlock_acquire(&lock_swap);
                     unsigned si;
                     int err = bitmap_alloc(swapmap, &si);
-                    if(err == 0) {
+                    if(err > 0) {
                         panic("bitmap_alloc failed");
                     }
                     temp->swap_index = si;
+                    temp->dup = si;
                     spinlock_release(&lock_swap);
                     struct iovec iov;
                     check_coremap(temp->swap_index, -1);
@@ -320,18 +329,19 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     spinlock_acquire(&lock_swap);
                     unsigned si;
                     int err = bitmap_alloc(swapmap, &si);
-                    if(err == 0) {
+                    if(err > 0) {
                         panic("bitmap_alloc failed");
                     }
 
                     temp->swap_index = si;
+                    temp->dup = si;
                     spinlock_release(&lock_swap);
                     temp->paddr = 0;
                     check_coremap(temp->swap_index, -1);
                     struct iovec iov;
                     struct uio kuio;
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
-                    KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) != true);
+                    KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) != false);
                     err = VOP_READ(swap_disk,&kuio);
 
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,temp->swap_index*PAGE_SIZE,UIO_WRITE);
@@ -523,6 +533,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 void
 as_destroy(struct addrspace *as)
 {
+    (void)as;
 	/*
 	 * Clean up as needed.
 	 */
@@ -731,7 +742,7 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
     temp->vaddr = vaddr & PAGE_FRAME;
     temp->paddr = paddr;
-
+    temp->on_disk = false;
     if(swap_enable == false) {
         goto noswap;
     }
@@ -740,10 +751,11 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     spinlock_acquire(&lock_swap);
     unsigned si;
     int err = bitmap_alloc(swapmap, &si);
-    if(err == 0) {
+    if(err > 0) {
         panic("bitmap_alloc failed");
     }
     temp->swap_index = si;
+    temp->dup = si;
     spinlock_release(&lock_swap);
     temp->on_disk = false;
 
