@@ -306,6 +306,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     }
     if(swap_enable == true) {
         lock_acquire(pte->p_lock);
+        if(pte->on_disk != true) {
+            int index = pte->paddr/PAGE_SIZE;
+            if(coremap[index].page_state == PS_VICTIM) {
+                lock_release(pte->p_lock);
+                thread_yield();
+                lock_acquire(pte->p_lock);
+            }
+        }
     }
     if(pte->on_disk == true) {
         pte->paddr = alloc_upages(pte);
