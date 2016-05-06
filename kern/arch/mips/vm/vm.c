@@ -173,15 +173,17 @@ alloc_kpages(unsigned npages)
             ts.ts_vaddr = coremap[j].pte->vaddr;
             struct cpu* c = get_cpu(coremap[j].cpu);
             ipi_tlbshootdown(c,&ts);
-            struct uio kuio;
-            struct iovec iov;
-            uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
-            if(coremap[j].pte->swap_index != coremap[j].pte->dup) {
-                panic("si changed");
-            }
-            int err = VOP_WRITE(swap_disk,&kuio);
-            if(err) {
-                panic("asdasdas");
+            if(evict_states[j-start_index] == PS_DIRTY) {
+                struct uio kuio;
+                struct iovec iov;
+                uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
+                if(coremap[j].pte->swap_index != coremap[j].pte->dup) {
+                    panic("si changed");
+                }
+                int err = VOP_WRITE(swap_disk,&kuio);
+                if(err) {
+                    panic("asdasdas");
+                }
             }
             coremap[j].pte->on_disk = true;
             coremap[j].page_state = PS_FIXED;
@@ -296,6 +298,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     }
 
     //check if page_fault
+    bool new_page = false;
     struct page_table_entry *pte = get_pte(as,faultaddress);
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
@@ -303,12 +306,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         if(pte == NULL) {
             return ENOMEM;
         }
+        new_page = true;
     }
     if(swap_enable == true) {
         lock_acquire(pte->p_lock);
-        if(pte->on_disk != true) {
+        if(new_page == false && pte->on_disk == false) {
             int index = pte->paddr/PAGE_SIZE;
-            if(coremap[index].page_state == PS_VICTIM) {
+            while(coremap[index].page_state == PS_VICTIM) {
                 lock_release(pte->p_lock);
                 thread_yield();
                 lock_acquire(pte->p_lock);
@@ -448,15 +452,17 @@ alloc_upages(struct page_table_entry *pte)
         ts.ts_vaddr = coremap[j].pte->vaddr;
         struct cpu* c = get_cpu(coremap[j].cpu);
         ipi_tlbshootdown(c,&ts);
-        struct uio kuio;
-        struct iovec iov;
-        uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
-        if(coremap[j].pte->swap_index != coremap[j].pte->dup) {
-            panic("si changed");
-        }
-        int err = VOP_WRITE(swap_disk,&kuio);
-        if(err) {
-            panic("disk fail");
+        if(evict_page_state == PS_DIRTY) {
+            struct uio kuio;
+            struct iovec iov;
+            uio_kinit(&iov,&kuio,(void *)PADDR_TO_KVADDR(coremap[j].pte->paddr),PAGE_SIZE,coremap[j].pte->swap_index*PAGE_SIZE,UIO_WRITE);
+            if(coremap[j].pte->swap_index != coremap[j].pte->dup) {
+                panic("si changed");
+            }
+            int err = VOP_WRITE(swap_disk,&kuio);
+            if(err) {
+                panic("disk fail");
+            }
         }
         coremap[j].pte->on_disk = true;
         coremap[j].page_state = PS_VICTIM;
