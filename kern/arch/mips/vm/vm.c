@@ -312,7 +312,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         lock_acquire(pte->p_lock);
         if(new_page == false && pte->on_disk == false) {
             int index = pte->paddr/PAGE_SIZE;
-            while(coremap[index].page_state == PS_VICTIM) {
+            if(coremap[index].page_state == PS_VICTIM) {
                 lock_release(pte->p_lock);
                 thread_yield();
                 lock_acquire(pte->p_lock);
