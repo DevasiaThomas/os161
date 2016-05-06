@@ -253,7 +253,6 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     t_newpte->swap_index = si;
                     t_newpte->dup = si;
                     spinlock_release(&lock_swap);
-                    check_coremap(t_newpte->swap_index, -1);
                     struct iovec iov;
                     struct uio kuio;
                     uio_kinit(&iov,&kuio,(void*)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE,t_newpte->swap_index*PAGE_SIZE,UIO_WRITE);
