@@ -433,8 +433,8 @@ alloc_upages(struct page_table_entry *pte)
     spinlock_release(&splk_coremap);
 
     if(swap_enable && evict_page_state != PS_FREE) {
-        KASSERT(pte!=NULL);
-        KASSERT(coremap[j].pte != NULL);
+        KASSERT(coremap[j].busy == true);
+        KASSERT(coremap[j].page_state == PS_VICTIM);
         lock_acquire(coremap[j].pte->p_lock);
         struct tlbshootdown ts;
         ts.ts_vaddr = coremap[j].pte->vaddr;
