@@ -108,7 +108,10 @@ alloc_kpages(unsigned npages)
             continue;
         }
         if(swap_enable == true) {
-            if((coremap[i].busy == false) && (coremap[i].page_state == PS_FREE || coremap[i].page_state == PS_CLEAN || coremap[i].page_state == PS_DIRTY)) {
+            if(coremap[i].busy == false && coremap[i].page_state != PS_FIXED && coremap[i].page_state != PS_VICTIM) {
+                KASSERT(coremap[i].busy == true);
+                KASSERT(coremap[i].page_state != PS_FIXED);
+                KASSERT(coremap[i].page_state != PS_VICTIM);
                 if(coremap[i].recent == false) {
                     bool available = true;
                     for(unsigned j = i; j < i + npages; j++) {
@@ -411,7 +414,10 @@ alloc_upages(struct page_table_entry *pte)
                 break;
             }
         }
-        else if((coremap[i].busy == false) && (coremap[i].page_state == PS_FREE || coremap[i].page_state == PS_CLEAN || coremap[i].page_state == PS_DIRTY)) {
+        else if(coremap[i].busy == false && coremap[i].page_state != PS_FIXED && coremap[i].page_state != PS_VICTIM) {
+            KASSERT(coremap[i].busy == false);
+            KASSERT(coremap[i].page_state == PS_FIXED);
+            KASSERT(coremap[i].page_state == PS_VICTIM);
             if(coremap[i].recent == false) {
                 start_index = i;
                 pa = i*PAGE_SIZE;
