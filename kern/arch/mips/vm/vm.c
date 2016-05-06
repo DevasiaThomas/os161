@@ -187,6 +187,7 @@ alloc_kpages(unsigned npages)
             }
             coremap[j].pte->on_disk = true;
             coremap[j].page_state = PS_FIXED;
+            coremap[j].busy = false;
             coremap[j].block_size = npages;
 
             bzero((void *)PADDR_TO_KVADDR(j*PAGE_SIZE),PAGE_SIZE);
@@ -195,6 +196,7 @@ alloc_kpages(unsigned npages)
         }
         else {
             coremap[j].page_state = PS_FIXED;
+            coremap[j].busy = false;
             coremap[j].block_size = npages;
             coremap[j].pte = NULL;
             bzero((void *)PADDR_TO_KVADDR(j*PAGE_SIZE),PAGE_SIZE);
@@ -298,7 +300,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     }
 
     //check if page_fault
-    bool new_page = false;
     struct page_table_entry *pte = get_pte(as,faultaddress);
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
@@ -306,18 +307,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         if(pte == NULL) {
             return ENOMEM;
         }
-        new_page = true;
+        coremap[pte->paddr/PAGE_SIZE].page_state = PS_CLEAN;
     }
     if(swap_enable == true) {
         lock_acquire(pte->p_lock);
-        if(new_page == false && pte->on_disk == false) {
-            int index = pte->paddr/PAGE_SIZE;
-            while(coremap[index].page_state == PS_VICTIM) {
-                lock_release(pte->p_lock);
-                thread_yield();
-                lock_acquire(pte->p_lock);
-            }
-        }
     }
     if(pte->on_disk == true) {
         pte->paddr = alloc_upages(pte);
@@ -359,7 +352,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     }
     coremap[pte->paddr/4096].cpu = curcpu->c_number;
     coremap[pte->paddr/4096].recent = true;
-    coremap[pte->paddr/4096].busy = false;
     splx(spl);
     if(swap_enable == true) {
         lock_release(pte->p_lock);
@@ -465,6 +457,7 @@ alloc_upages(struct page_table_entry *pte)
             }
         }
         coremap[j].pte->on_disk = true;
+        coremap[j].busy = false;
         coremap[j].page_state = PS_VICTIM;
         coremap[j].block_size = 1;
 
@@ -476,6 +469,7 @@ alloc_upages(struct page_table_entry *pte)
     else {
         coremap[j].block_size = 1;
         coremap[j].page_state = PS_VICTIM;
+        coremap[j].busy = false;
         coremap[j].pte = pte;
         bzero((void *)PADDR_TO_KVADDR(pa), PAGE_SIZE);
     }
