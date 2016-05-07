@@ -192,6 +192,7 @@ alloc_kpages(unsigned npages)
                 }
             }
             coremap[j].pte->on_disk = true;
+            coremap[j].pte->paddr = 0;
             coremap[j].page_state = PS_FIXED;
             coremap[j].busy = false;
             coremap[j].block_size = npages;
@@ -479,6 +480,7 @@ alloc_upages(struct page_table_entry *pte)
         }
 
         coremap[j].pte->on_disk = true;
+        coremap[j].pte->paddr = 0;
         coremap[j].page_state = PS_VICTIM;
         coremap[j].busy = false;
         coremap[j].block_size = 1;
