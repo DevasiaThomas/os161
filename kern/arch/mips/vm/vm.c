@@ -320,17 +320,18 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     struct page_table_entry *pte = get_pte(as,faultaddress);
     if(pte == NULL) {
         pte = add_pte(as,faultaddress,0);
+        new_page = true;
     }
     if(swap_enable == true) {
         lock_acquire(pte->p_lock);
-        //if(new_page == false && pte->on_disk == false) {
-        //    int index = pte->paddr/PAGE_SIZE;
-        //    while(coremap[index].busy == true) {
-        //        lock_release(pte->p_lock);
-        //        thread_yield();
-        //        lock_acquire(pte->p_lock);
-        //    }
-        //}
+        if(new_page == false && pte->on_disk == false) {
+            int index = pte->paddr/PAGE_SIZE;
+            while(coremap[index].busy == true) {
+                lock_release(pte->p_lock);
+                thread_yield();
+                lock_acquire(pte->p_lock);
+            }
+        }
     }
     if(pte->on_disk == true || pte->paddr == 0) {
         pte->paddr = alloc_upages(pte);
@@ -351,7 +352,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         if(pte->paddr == 0) {
             return ENOMEM;
         }
-        new_page = true;
+        //new_page = true;
         coremap[pte->paddr/PAGE_SIZE].page_state = PS_CLEAN;
     }
 
@@ -375,9 +376,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
     spinlock_acquire(&splk_coremap);
     coremap[pte->paddr/4096].cpu = curcpu->c_number;
     coremap[pte->paddr/4096].recent = true;
-    if(new_page) {
-        coremap[pte->paddr/4096].busy = false;
-    }
+    //if(new_page) {
+    //    coremap[pte->paddr/4096].busy = false;
+    //}
     spinlock_release(&splk_coremap);
     splx(spl);
     if(swap_enable == true) {
@@ -498,6 +499,7 @@ alloc_upages(struct page_table_entry *pte)
         coremap[j].pte->on_disk = true;
         coremap[j].pte->paddr = 0;
         coremap[j].page_state = PS_VICTIM;
+        coremap[j].busy = false;
         coremap[j].block_size = 1;
 
         bzero((void *)PADDR_TO_KVADDR(pa), PAGE_SIZE);
