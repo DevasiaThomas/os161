@@ -218,7 +218,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 }
                 temp->vaddr = t_oldpte->vaddr;
                 if(t_oldpte->paddr != 0) {
-                    temp->paddr = alloc_upages(t_newpte);
+                    temp->paddr = alloc_upages(temp);
                     if(temp->paddr == 0) {
                         kfree(temp);
                         return ENOMEM;
