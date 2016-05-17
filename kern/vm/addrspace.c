@@ -75,6 +75,7 @@ free_page_table(struct page_table_entry **pte) {
         }
     }
     else {
+        *pte = NULL;
         while(t_pte != NULL) {
             lock_acquire(t_pte->p_lock);
             struct page_table_entry *temp = t_pte->next;
@@ -246,6 +247,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 t_newpte->vaddr = t_oldpte->vaddr;
                 if(t_oldpte->on_disk == false) {
                     lock_acquire(lock_copy);
+                    t_newpte->p_lock = lock_create("pl");
                     spinlock_acquire(&lock_swap);
                     unsigned si;
                     int err = bitmap_alloc(swapmap, &si);
@@ -255,9 +257,7 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     t_newpte->swap_index = si;
                     t_newpte->dup = si;
                     spinlock_release(&lock_swap);
-                    t_newpte->p_lock = lock_create("pl");
-                    lock_acquire(t_newpte->p_lock);
-                    /*memmove(kbuf,(void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
+                                        /*memmove(kbuf,(void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
                     t_newpte->paddr = alloc_upages(t_newpte);
                     memmove((void *)PADDR_TO_KVADDR(t_newpte->paddr),kbuf,PAGE_SIZE);
                     t_newpte->on_disk = false;
@@ -273,11 +273,11 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     (void)err;
                     t_newpte->paddr = 0;
                     t_newpte->on_disk = true;
-                    lock_release(t_newpte->p_lock);
                     lock_release(lock_copy);
 	            }
 	            else {
                     lock_acquire(lock_copy);
+                    t_newpte->p_lock = lock_create("pl");
                     spinlock_acquire(&lock_swap);
                     unsigned si;
                     int err = bitmap_alloc(swapmap, &si);
@@ -287,12 +287,11 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     t_newpte->swap_index = si;
                     t_newpte->dup = si;
                     spinlock_release(&lock_swap);
-                    t_newpte->p_lock = lock_create("pl");
+
 	                t_newpte->paddr = 0;
                     struct iovec iov;
                     struct uio kuio;
                     KASSERT(t_oldpte->on_disk == true);
-                    check_coremap(t_newpte->swap_index, -1);
                     uio_kinit(&iov,&kuio,kbuf,PAGE_SIZE,t_oldpte->swap_index*PAGE_SIZE,UIO_READ);
                     KASSERT(bitmap_isset(swapmap,t_oldpte->swap_index) != false);
                     err = VOP_READ(swap_disk,&kuio);
@@ -310,11 +309,11 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                 t_oldpte = t_oldpte->next;
             }
             else {
+                lock_acquire(t_oldpte->p_lock);
                 struct page_table_entry *temp = kmalloc(sizeof(struct page_table_entry));
                 if(temp == NULL) {
                     return ENOMEM;
                 }
-                lock_acquire(t_oldpte->p_lock);
                 temp->vaddr = t_oldpte->vaddr;
                 if(t_oldpte->on_disk == false) {
                     lock_acquire(lock_copy);
@@ -329,7 +328,6 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     spinlock_release(&lock_swap);
 
                     temp->p_lock = lock_create("pl");
-                    lock_acquire(temp->p_lock);
                    /* memmove(kbuf,(void *)PADDR_TO_KVADDR(t_oldpte->paddr),PAGE_SIZE);
                     temp->paddr = alloc_upages(temp);
                     memmove((void *)PADDR_TO_KVADDR(temp->paddr),kbuf,PAGE_SIZE);
@@ -346,7 +344,6 @@ copy_page_table(struct addrspace *old_as, struct addrspace *new_as)
                     (void)err;
                     temp->paddr = 0;
                     temp->on_disk = true;
-                    lock_release(temp->p_lock);
                     lock_release(lock_copy);
 
                 }
@@ -765,7 +762,7 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
         return NULL;
     }
     temp->vaddr = vaddr & PAGE_FRAME;
-    temp->paddr = paddr;
+    temp->paddr = 0;
     temp->on_disk = false;
     if(swap_enable == false) {
         goto noswap;
@@ -796,6 +793,7 @@ add_pte(struct addrspace *as, vaddr_t vaddr,paddr_t paddr)
     }
     t_pte->next = temp;
 
+    (void)paddr;
     return temp;
 }
 
